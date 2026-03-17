@@ -12,5 +12,12 @@
         "total_questions": 1,
         "correct_questions": 0,
         "score_rate": "0.0%"
+    },
+    {
+        "time": "2026-03-17 00:23:58",
+        "exam_type": "A卷_人壽保險（单卷抽题）",
+        "total_questions": 2,
+        "correct_questions": 1,
+        "score_rate": "50.0%"
     }
 ]

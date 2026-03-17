@@ -1,7 +1,7 @@
 [Setup]
 AppName=綜合選擇題考試系統
 AppVersion=1.0
-DefaultDirName={autopf}\綜合選擇題考試系統
+DefaultDirName=C:\綜合選擇題考試系統
 DefaultGroupName=綜合選擇題考試系統
 OutputDir=installer_dist
 OutputBaseFilename=綜合選擇題考試系統安装包

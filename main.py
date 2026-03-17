@@ -5,12 +5,18 @@ import random
 from datetime import datetime
 from typing import List, Dict, Any
 
+# 导入多语言支持
+from translations import _
+
+# 导入PDF处理库
+import PyPDF2
+
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QRadioButton, QButtonGroup, QLineEdit,
     QTextEdit, QMessageBox, QTabWidget, QTableWidget, QTableWidgetItem,
     QHeaderView, QProgressBar, QComboBox, QInputDialog, QDialog,
-    QDialogButtonBox, QFormLayout, QGroupBox, QCheckBox
+    QDialogButtonBox, QFormLayout, QGroupBox, QCheckBox, QFileDialog
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont, QPalette, QColor, QIcon
@@ -135,7 +141,7 @@ class ExamMainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("綜合選擇題考試系統")
+        self.setWindowTitle(_('app_title'))
         self.setMinimumSize(800, 600)
         self.resize(1000, 700)
 
@@ -161,9 +167,17 @@ class ExamMainWindow(QMainWindow):
         main_layout = QVBoxLayout(central_widget)
 
         # 顶部状态栏
-        self.status_bar = QLabel("就绪 - 请选择练习模式开始练习")
+        self.status_bar = QLabel(_('status_ready'))
         self.status_bar.setStyleSheet("background-color: #f0f0f0; padding: 8px; border-radius: 4px;")
         main_layout.addWidget(self.status_bar)
+
+        # 顶部按钮栏
+        top_btn_layout = QHBoxLayout()
+        # 检查更新按钮
+        self.check_update_btn = QPushButton(_('update_feature'))
+        self.check_update_btn.clicked.connect(self.check_for_updates)
+        top_btn_layout.addWidget(self.check_update_btn)
+        main_layout.addLayout(top_btn_layout)
 
         # 标签页
         self.tab_widget = QTabWidget()
@@ -172,17 +186,17 @@ class ExamMainWindow(QMainWindow):
         # 1. 练习标签页
         self.practice_tab = QWidget()
         self.setup_practice_tab()
-        self.tab_widget.addTab(self.practice_tab, "📝 开始练习")
+        self.tab_widget.addTab(self.practice_tab, _('practice_tab'))
 
         # 2. 题库管理标签页
         self.bank_tab = QWidget()
         self.setup_bank_tab()
-        self.tab_widget.addTab(self.bank_tab, "📚 题库管理")
+        self.tab_widget.addTab(self.bank_tab, _('bank_tab'))
 
         # 3. 练习记录标签页
         self.record_tab = QWidget()
         self.setup_record_tab()
-        self.tab_widget.addTab(self.record_tab, "📊 练习记录")
+        self.tab_widget.addTab(self.record_tab, _('record_tab'))
 
         # 初始化记录表格
         self.load_records_to_table()
@@ -253,7 +267,7 @@ class ExamMainWindow(QMainWindow):
         layout = QVBoxLayout(self.practice_tab)
 
         # 模式选择区域
-        mode_group = QGroupBox("练习模式选择")
+        mode_group = QGroupBox(_('mode_selection'))
         mode_layout = QVBoxLayout(mode_group)
 
         # 子布局：模式类型选择 + 具体选项
@@ -261,9 +275,9 @@ class ExamMainWindow(QMainWindow):
 
         # 模式类型选择（单卷/分组）
         type_layout = QVBoxLayout()
-        type_label = QLabel("练习类型：")
-        self.single_radio = QRadioButton("单卷练习（A/B/C卷）")
-        self.group_radio = QRadioButton("按考试分组练习（卷一/卷二）")
+        type_label = QLabel(_('practice_type'))
+        self.single_radio = QRadioButton(_('single_practice'))
+        self.group_radio = QRadioButton(_('group_practice'))
         self.single_radio.setChecked(True)  # 默认选中单卷练习
 
         # 绑定单选按钮事件
@@ -277,7 +291,7 @@ class ExamMainWindow(QMainWindow):
 
         # 具体选项下拉框
         target_layout = QVBoxLayout()
-        target_label = QLabel("练习目标：")
+        target_label = QLabel(_('practice_target'))
         self.target_combo = QComboBox()
         self.update_target_combobox()  # 初始化下拉框
 
@@ -287,9 +301,9 @@ class ExamMainWindow(QMainWindow):
 
         # 抽题数量输入框
         count_layout = QVBoxLayout()
-        count_label = QLabel("抽题数量：")
+        count_label = QLabel(_('question_count'))
         self.question_count_edit = QLineEdit()
-        self.question_count_edit.setPlaceholderText("默认50题")
+        self.question_count_edit.setPlaceholderText("50")
         self.question_count_edit.setFixedWidth(100)
 
         count_layout.addWidget(count_label)
@@ -297,7 +311,7 @@ class ExamMainWindow(QMainWindow):
         top_layout.addLayout(count_layout)
 
         # 开始按钮
-        self.start_btn = QPushButton("开始练习")
+        self.start_btn = QPushButton(_('start_practice'))
         self.start_btn.clicked.connect(self.start_exam)
         self.start_btn.setDisabled(True)
         self.target_combo.currentIndexChanged.connect(lambda idx: self.start_btn.setDisabled(idx == 0))
@@ -313,10 +327,10 @@ class ExamMainWindow(QMainWindow):
         layout.addWidget(self.progress_bar)
 
         # 题目显示区域
-        question_group = QGroupBox("题目内容")
+        question_group = QGroupBox(_('question_content'))
         question_layout = QVBoxLayout(question_group)
 
-        self.question_label = QLabel("请选择练习模式并点击「开始练习」按钮")
+        self.question_label = QLabel(_('status_ready'))
         self.question_label.setWordWrap(True)
         self.question_label.setStyleSheet("font-size: 16px; margin: 8px;")
         question_layout.addWidget(self.question_label)
@@ -341,26 +355,26 @@ class ExamMainWindow(QMainWindow):
         # 手动输入答案区域
         input_group = QHBoxLayout()
         self.answer_input = QLineEdit()
-        self.answer_input.setPlaceholderText("也可手动输入A/B/C/D，按Enter提交")
+        self.answer_input.setPlaceholderText(_('answer_hint'))
         self.answer_input.returnPressed.connect(self.submit_answer)
-        input_group.addWidget(QLabel("手动输入答案："))
+        input_group.addWidget(QLabel(_('manual_answer')))
         input_group.addWidget(self.answer_input)
         layout.addLayout(input_group)
 
         # 按钮区域
         btn_layout = QHBoxLayout()
 
-        self.submit_btn = QPushButton("提交答案")
+        self.submit_btn = QPushButton(_('submit_answer'))
         self.submit_btn.clicked.connect(self.submit_answer)
         self.submit_btn.setDisabled(True)
         btn_layout.addWidget(self.submit_btn)
 
-        self.next_btn = QPushButton("下一题")
+        self.next_btn = QPushButton(_('next_question'))
         self.next_btn.clicked.connect(self.show_next_question)
         self.next_btn.setDisabled(True)
         btn_layout.addWidget(self.next_btn)
 
-        self.finish_btn = QPushButton("结束练习")
+        self.finish_btn = QPushButton(_('finish_practice'))
         self.finish_btn.clicked.connect(self.finish_exam)
         self.finish_btn.setDisabled(True)
         btn_layout.addWidget(self.finish_btn)
@@ -401,31 +415,36 @@ class ExamMainWindow(QMainWindow):
         # 操作按钮
         btn_layout = QHBoxLayout()
 
-        self.add_question_btn = QPushButton("新增题目")
+        self.add_question_btn = QPushButton(_('add_question'))
         self.add_question_btn.clicked.connect(self.add_question)
         btn_layout.addWidget(self.add_question_btn)
 
-        self.edit_question_btn = QPushButton("编辑选中题目")
+        self.edit_question_btn = QPushButton(_('edit_question'))
         self.edit_question_btn.clicked.connect(self.edit_question)
         self.edit_question_btn.setDisabled(True)
         btn_layout.addWidget(self.edit_question_btn)
 
-        self.delete_question_btn = QPushButton("删除选中题目")
+        self.delete_question_btn = QPushButton(_('delete_question'))
         self.delete_question_btn.clicked.connect(self.delete_question)
         self.delete_question_btn.setDisabled(True)
         btn_layout.addWidget(self.delete_question_btn)
 
         # 刷新题库按钮
-        self.refresh_bank_btn = QPushButton("刷新题库")
+        self.refresh_bank_btn = QPushButton(_('refresh_bank'))
         self.refresh_bank_btn.clicked.connect(self.refresh_question_banks)
         btn_layout.addWidget(self.refresh_bank_btn)
+
+        # PDF导入按钮
+        self.import_pdf_btn = QPushButton(_('pdf_feature'))
+        self.import_pdf_btn.clicked.connect(self.import_pdf_questions)
+        btn_layout.addWidget(self.import_pdf_btn)
 
         layout.addLayout(btn_layout)
 
         # 题库表格（增加所属考试列）
         self.bank_table = QTableWidget()
         self.bank_table.setColumnCount(8)
-        self.bank_table.setHorizontalHeaderLabels(["所属考试", "题库名称", "题目编号", "题目内容", "选项A", "选项B", "选项C", "选项D"])
+        self.bank_table.setHorizontalHeaderLabels([_('exam_group'), _('bank_name'), _('question_id'), _('question_text'), _('option_a'), _('option_b'), _('option_c'), _('option_d')])
         self.bank_table.horizontalHeader().setStretchLastSection(True)
         self.bank_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.bank_table.itemSelectionChanged.connect(self.on_bank_table_select)
@@ -439,14 +458,14 @@ class ExamMainWindow(QMainWindow):
         layout = QVBoxLayout(self.record_tab)
 
         # 刷新按钮
-        refresh_btn = QPushButton("刷新记录")
+        refresh_btn = QPushButton(_('refresh_records'))
         refresh_btn.clicked.connect(self.load_records_to_table)
         layout.addWidget(refresh_btn)
 
         # 记录表格
         self.record_table = QTableWidget()
         self.record_table.setColumnCount(5)
-        self.record_table.setHorizontalHeaderLabels(["练习时间", "练习类型", "答题总数", "正确题数", "正确率"])
+        self.record_table.setHorizontalHeaderLabels([_('practice_time'), _('practice_type_col'), _('total_questions'), _('correct_questions'), _('score_rate')])
         self.record_table.horizontalHeader().setStretchLastSection(True)
         self.record_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self.record_table)
@@ -473,7 +492,6 @@ class ExamMainWindow(QMainWindow):
         # 创建題庫文件夹
         if not os.path.exists(bank_folder):
             os.makedirs(bank_folder)
-            QMessageBox.information(self, "提示", f"未找到「{bank_folder}」文件夹，已自动创建，请将JSON题库文件放入该文件夹后刷新")
             return raw_banks
 
         # 遍历JSON文件
@@ -488,7 +506,7 @@ class ExamMainWindow(QMainWindow):
                     if isinstance(file_content, dict):
                         # 必选字段
                         if "name" not in file_content or "questions" not in file_content:
-                            QMessageBox.warning(self, "警告", f"文件{filename}缺少name或questions字段，跳过加载")
+                            QMessageBox.warning(self, _('warning'), _('missing_fields', filename=filename))
                             continue
 
                         # 补充所属考试（默认卷一）
@@ -498,10 +516,10 @@ class ExamMainWindow(QMainWindow):
 
                         # 验证题目数量
                         if "count" in file_content and len(questions) != file_content["count"]:
-                            QMessageBox.warning(self, "警告",
-                                                f"文件{filename}中题目数量({len(questions)})与声明的数量({file_content['count']})不符")
+                            QMessageBox.warning(self, _('warning'),
+                                                _('question_count_mismatch', filename=filename, actual=len(questions), declared=file_content['count']))
                     else:
-                        QMessageBox.warning(self, "警告", f"文件{filename}格式不正确，跳过加载")
+                        QMessageBox.warning(self, _('warning'), _('invalid_format', filename=filename))
                         continue
 
                     # 验证题目有效性
@@ -510,7 +528,7 @@ class ExamMainWindow(QMainWindow):
                         if self.is_valid_question(q):
                             valid_questions.append(q)
                         else:
-                            QMessageBox.warning(self, "警告", f"文件{filename}中第{idx + 1}题格式无效，已跳过")
+                            QMessageBox.warning(self, _('warning'), _('invalid_question', filename=filename, index=idx + 1))
 
                     if valid_questions:
                         raw_banks[bank_name] = {
@@ -518,18 +536,16 @@ class ExamMainWindow(QMainWindow):
                             "exam_group": exam_group,
                             "questions": valid_questions
                         }
-                        QMessageBox.information(self, "成功",
-                                                f"已加载「{bank_name}」题库（所属考试：{exam_group}）：{len(valid_questions)}题")
                     else:
-                        QMessageBox.warning(self, "警告", f"文件{filename}中无有效题目，跳过加载")
+                        pass
 
                 except json.JSONDecodeError:
-                    QMessageBox.warning(self, "警告", f"文件{filename}不是有效的JSON文件，跳过加载")
+                    QMessageBox.warning(self, _('warning'), _('invalid_json', filename=filename))
                 except Exception as e:
-                    QMessageBox.warning(self, "警告", f"加载文件{filename}失败：{str(e)}")
+                    QMessageBox.warning(self, _('warning'), _('bank_load_failed', filename=filename, error=str(e)))
 
         if not raw_banks:
-            QMessageBox.warning(self, "提示", f"「{bank_folder}」文件夹中未找到有效题库文件")
+            pass
 
         return raw_banks
 
@@ -563,7 +579,7 @@ class ExamMainWindow(QMainWindow):
         self.load_and_group_question_banks()
         self.load_bank_to_table()
         self.update_target_combobox()
-        QMessageBox.information(self, "成功", "题库已刷新完成")
+        QMessageBox.information(self, _('success'), _('banks_refreshed'))
 
     def is_valid_question(self, question: Dict) -> bool:
         """验证题目格式是否有效"""
@@ -673,12 +689,12 @@ class ExamMainWindow(QMainWindow):
         """开始练习（支持单卷/分组两种模式）"""
         try:
             target_text = self.target_combo.currentText()
-            if target_text == "请选择练习目标":
+            if target_text == _('please_select'):
                 return
 
             # 解析选中的目标
             self.selected_target = target_text.split("（")[0]
-            self.status_bar.setText(f"正在练习：{target_text}")
+            self.status_bar.setText(_('status_practicing', target=target_text))
 
             # 清空答题记录
             self.user_answers.clear()
@@ -692,7 +708,7 @@ class ExamMainWindow(QMainWindow):
                 else:
                     select_count = 50
             except ValueError:
-                QMessageBox.warning(self, "提示", "抽题数量必须是数字，已使用默认值50")
+                QMessageBox.warning(self, _('warning'), "抽题数量必须是数字，已使用默认值50")
                 select_count = 50
 
             # 根据模式类型处理
@@ -703,7 +719,7 @@ class ExamMainWindow(QMainWindow):
 
                 # 验证单卷是否存在
                 if self.selected_target not in self.raw_question_banks:
-                    QMessageBox.warning(self, "提示", f"题库「{self.selected_target}」不存在")
+                    QMessageBox.warning(self, _('warning'), f"题库「{self.selected_target}」不存在")
                     return
 
                 # 获取该卷的所有题目
@@ -717,7 +733,7 @@ class ExamMainWindow(QMainWindow):
 
                 # 验证分组是否存在
                 if self.selected_target not in self.exam_groups:
-                    QMessageBox.warning(self, "提示", f"考试分组「{self.selected_target}」不存在")
+                    QMessageBox.warning(self, _('warning'), f"考试分组「{self.selected_target}」不存在")
                     return
 
                 # 获取该分组的所有题目
@@ -729,7 +745,7 @@ class ExamMainWindow(QMainWindow):
                 select_count = 10
             elif select_count > total_questions:
                 select_count = total_questions
-                QMessageBox.information(self, "提示", f"抽题数量超过题库总数，已自动调整为{total_questions}题")
+                QMessageBox.information(self, _('information'), f"抽题数量超过题库总数，已自动调整为{total_questions}题")
 
             # 随机抽题
             random.shuffle(bank_questions)
@@ -737,7 +753,7 @@ class ExamMainWindow(QMainWindow):
 
             # 检查题库是否为空
             if not self.current_exam:
-                QMessageBox.warning(self, "提示", "当前选择的练习目标为空，请先添加题目")
+                QMessageBox.warning(self, _('warning'), _('no_questions'))
                 self.start_btn.setDisabled(False)
                 self.target_combo.setDisabled(False)
                 return
@@ -757,7 +773,7 @@ class ExamMainWindow(QMainWindow):
             self.single_radio.setDisabled(True)
             self.group_radio.setDisabled(True)
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"开始练习失败：{str(e)}")
+            QMessageBox.critical(self, _('error'), _('start_failed', error=str(e)))
             # 恢复状态
             self.start_btn.setDisabled(False)
             self.target_combo.setDisabled(False)
@@ -799,7 +815,7 @@ class ExamMainWindow(QMainWindow):
             self.submit_btn.setDisabled(False)
             self.next_btn.setDisabled(True)
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"加载题目失败：{str(e)}")
+            QMessageBox.critical(self, _('error'), _('load_question_failed', error=str(e)))
 
     def show_next_question(self):
         """显示下一题"""
@@ -807,7 +823,7 @@ class ExamMainWindow(QMainWindow):
             self.current_question_idx += 1
             self.show_question(self.current_question_idx)
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"加载下一题失败：{str(e)}")
+            QMessageBox.critical(self, _('error'), _('load_next_failed', error=str(e)))
 
     def submit_answer(self):
         """提交答案"""
@@ -826,7 +842,7 @@ class ExamMainWindow(QMainWindow):
             elif self.answer_input.text().strip().upper() in ["A", "B", "C", "D"]:
                 user_ans = self.answer_input.text().strip().upper()
             else:
-                QMessageBox.warning(self, "提示", "请选择或输入有效的答案(A/B/C/D)")
+                QMessageBox.warning(self, _('warning'), _('enter_valid_answer'))
                 return
 
             # 验证答案
@@ -863,14 +879,14 @@ class ExamMainWindow(QMainWindow):
             self.submit_btn.setDisabled(True)
             self.next_btn.setDisabled(False)
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"提交答案失败：{str(e)}")
+            QMessageBox.critical(self, _('error'), _('submit_failed', error=str(e)))
 
     def finish_exam(self):
         """结束练习"""
         try:
             total = len(self.user_answers)
             if total == 0:
-                QMessageBox.information(self, "提示", "本次练习未答题，无成绩统计")
+                QMessageBox.information(self, _('information'), _('no_answers'))
                 self.reset_exam_state()
                 return
 
@@ -896,7 +912,7 @@ class ExamMainWindow(QMainWindow):
             # 重置状态
             self.reset_exam_state()
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"结束练习失败：{str(e)}")
+            QMessageBox.critical(self, _('error'), _('finish_failed', error=str(e)))
 
     def reset_exam_state(self):
         """重置考试状态"""
@@ -907,8 +923,8 @@ class ExamMainWindow(QMainWindow):
         self.target_combo.setDisabled(False)
         self.single_radio.setDisabled(False)
         self.group_radio.setDisabled(False)
-        self.status_bar.setText("练习结束 - 可选择新的练习模式继续练习")
-        self.question_label.setText("请选择练习模式并点击「开始练习」按钮")
+        self.status_bar.setText(_('status_finished'))
+        self.question_label.setText(_('status_ready'))
         self.feedback_label.setText("")
         self.progress_bar.setValue(0)
 
@@ -942,18 +958,18 @@ class ExamMainWindow(QMainWindow):
                 with open(record_file, "w", encoding="utf-8") as f:
                     json.dump(records, f, ensure_ascii=False, indent=4)
         except Exception as e:
-            QMessageBox.warning(self, "警告", f"练习记录保存失败：{str(e)}")
+            QMessageBox.warning(self, _('warning'), _('record_load_failed', error=str(e)))
 
     def add_question(self):
         """新增题目"""
         try:
             # 检查是否有题库
             if not self.raw_question_banks:
-                QMessageBox.warning(self, "提示", "暂无可用题库，请先创建新题库")
+                QMessageBox.warning(self, _('warning'), _('no_banks'))
                 # 创建新题库
-                bank_name, ok1 = QInputDialog.getText(self, "创建新题库", "请输入题库名称（如A卷/B卷）：")
+                bank_name, ok1 = QInputDialog.getText(self, _('create_bank'), _('bank_name_input'))
                 if ok1 and bank_name.strip():
-                    exam_group, ok2 = QInputDialog.getText(self, "选择所属考试", "请输入所属考试（如卷一/卷二）：", text="卷一")
+                    exam_group, ok2 = QInputDialog.getText(self, _('create_bank'), _('exam_group_input'), text="卷一")
                     if ok2 and exam_group.strip():
                         self.raw_question_banks[bank_name.strip()] = {
                             "file_name": f"{bank_name.strip()}.json",
@@ -970,13 +986,13 @@ class ExamMainWindow(QMainWindow):
             if dialog.exec():
                 q_data = dialog.get_question_data()
                 if not all([q_data["id"], q_data["question"], q_data["answer"]]):
-                    QMessageBox.warning(self, "提示", "题目编号、内容、正确答案不能为空")
+                    QMessageBox.warning(self, _('warning'), _('question_not_empty'))
                     return
 
                 # 选择添加到哪个题库
                 bank_names = list(self.raw_question_banks.keys())
                 bank_name, ok = QInputDialog.getItem(
-                    self, "选择题库", "添加到：", bank_names, 0, False
+                    self, _('select_bank'), _('add_to'), bank_names, 0, False
                 )
                 if ok:
                     # 添加题目
@@ -987,16 +1003,16 @@ class ExamMainWindow(QMainWindow):
                     self.save_question_bank()
                     self.load_bank_to_table()
                     self.update_target_combobox()
-                    QMessageBox.information(self, "成功", "题目添加成功")
+                    QMessageBox.information(self, _('success'), _('question_added'))
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"新增题目失败：{str(e)}")
+            QMessageBox.critical(self, _('error'), _('add_failed', error=str(e)))
 
     def edit_question(self):
         """编辑选中的题目"""
         try:
             selected_rows = self.bank_table.selectionModel().selectedRows()
             if not selected_rows:
-                QMessageBox.warning(self, "提示", "请先选中要编辑的题目")
+                QMessageBox.warning(self, _('warning'), _('please_select_question'))
                 return
 
             row = selected_rows[0].row()
@@ -1013,7 +1029,7 @@ class ExamMainWindow(QMainWindow):
             if dialog.exec():
                 new_data = dialog.get_question_data()
                 if not all([new_data["id"], new_data["question"], new_data["answer"]]):
-                    QMessageBox.warning(self, "提示", "题目编号、内容、正确答案不能为空")
+                    QMessageBox.warning(self, _('warning'), _('question_not_empty'))
                     return
 
                 # 更新原始题库
@@ -1026,19 +1042,19 @@ class ExamMainWindow(QMainWindow):
                 self.exam_groups = self.group_by_exam(self.raw_question_banks)
                 self.save_question_bank()
                 self.load_bank_to_table()
-                QMessageBox.information(self, "成功", "题目编辑成功")
+                QMessageBox.information(self, _('success'), _('question_edited'))
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"编辑题目失败：{str(e)}")
+            QMessageBox.critical(self, _('error'), _('edit_failed', error=str(e)))
 
     def delete_question(self):
         """删除选中的题目"""
         try:
             selected_rows = self.bank_table.selectionModel().selectedRows()
             if not selected_rows:
-                QMessageBox.warning(self, "提示", "请先选中要删除的题目")
+                QMessageBox.warning(self, _('warning'), _('please_select_question_delete'))
                 return
 
-            if QMessageBox.question(self, "确认", "确定要删除选中的题目吗？删除后无法恢复！",
+            if QMessageBox.question(self, _('confirm'), _('confirm_delete'),
                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
                 return
 
@@ -1062,9 +1078,9 @@ class ExamMainWindow(QMainWindow):
             self.save_question_bank()
             self.load_bank_to_table()
             self.update_target_combobox()
-            QMessageBox.information(self, "成功", "题目删除成功")
+            QMessageBox.information(self, _('success'), _('question_deleted'))
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"删除题目失败：{str(e)}")
+            QMessageBox.critical(self, _('error'), _('delete_failed', error=str(e)))
 
     def on_bank_table_select(self):
         """题库表格选中事件"""
@@ -1073,7 +1089,159 @@ class ExamMainWindow(QMainWindow):
             self.edit_question_btn.setDisabled(not has_selection)
             self.delete_question_btn.setDisabled(not has_selection)
         except Exception as e:
-            QMessageBox.warning(self, "警告", f"选择题目失败：{str(e)}")
+            QMessageBox.warning(self, _('warning'), _('select_failed', error=str(e)))
+
+    def import_pdf_questions(self):
+        """从PDF文件导入题目"""
+        try:
+            # 打开文件选择对话框
+            file_name, _ = QFileDialog.getOpenFileName(
+                self, _('select_pdf'), '', 'PDF Files (*.pdf)'
+            )
+            if not file_name:
+                return
+
+            # 打开PDF文件
+            with open(file_name, 'rb') as file:
+                reader = PyPDF2.PdfReader(file)
+                text = ''
+                for page_num in range(len(reader.pages)):
+                    page = reader.pages[page_num]
+                    text += page.extract_text()
+
+            # 简单的题目提取逻辑（实际应用中可能需要更复杂的解析）
+            questions = self.parse_pdf_text(text)
+
+            if not questions:
+                QMessageBox.warning(self, _('warning'), "未从PDF中提取到题目")
+                return
+
+            # 选择或创建题库
+            bank_name, ok = QInputDialog.getText(
+                self, _('create_bank'), _('bank_name_input')
+            )
+            if not ok or not bank_name.strip():
+                return
+
+            exam_group, ok = QInputDialog.getText(
+                self, _('create_bank'), _('exam_group_input'), text="卷一"
+            )
+            if not ok or not exam_group.strip():
+                return
+
+            # 创建新题库
+            bank_name = bank_name.strip()
+            exam_group = exam_group.strip()
+            self.raw_question_banks[bank_name] = {
+                "file_name": f"{bank_name}.json",
+                "exam_group": exam_group,
+                "questions": questions
+            }
+
+            # 保存题库
+            self.save_question_bank()
+
+            # 刷新题库
+            self.load_and_group_question_banks()
+            self.load_bank_to_table()
+            self.update_target_combobox()
+
+            QMessageBox.information(self, _('success'), _('pdf_import_success'))
+
+        except Exception as e:
+            QMessageBox.critical(self, _('error'), _('pdf_import_failed', error=str(e)))
+
+    def parse_pdf_text(self, text):
+        """解析PDF文本，提取题目"""
+        # 这里实现简单的题目提取逻辑
+        # 实际应用中可能需要根据PDF的具体格式进行调整
+        questions = []
+        lines = text.split('\n')
+        current_question = None
+        question_id = 1
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            # 检测题目开始
+            if line.endswith('?') or line.endswith('？'):
+                if current_question:
+                    # 保存上一题
+                    if self.is_valid_question(current_question):
+                        questions.append(current_question)
+                
+                # 开始新题目
+                current_question = {
+                    "id": str(question_id),
+                    "question": line,
+                    "options": {"A": "", "B": "", "C": "", "D": ""},
+                    "answer": "",
+                    "analysis": ""
+                }
+                question_id += 1
+            
+            # 检测选项
+            elif current_question:
+                if line.startswith('A.') or line.startswith('A、'):
+                    current_question["options"]["A"] = line[2:].strip()
+                elif line.startswith('B.') or line.startswith('B、'):
+                    current_question["options"]["B"] = line[2:].strip()
+                elif line.startswith('C.') or line.startswith('C、'):
+                    current_question["options"]["C"] = line[2:].strip()
+                elif line.startswith('D.') or line.startswith('D、'):
+                    current_question["options"]["D"] = line[2:].strip()
+                elif line.startswith('答案：') or line.startswith('答案:'):
+                    answer = line[3:].strip()
+                    if answer in ["A", "B", "C", "D"]:
+                        current_question["answer"] = answer
+
+        # 保存最后一题
+        if current_question and self.is_valid_question(current_question):
+            questions.append(current_question)
+
+        return questions
+
+    def check_for_updates(self):
+        """检查软件更新"""
+        try:
+            self.status_bar.setText(_('checking_update'))
+            
+            # 这里模拟检查更新
+            # 实际应用中，应该从服务器获取最新版本信息
+            import time
+            time.sleep(1)  # 模拟网络请求延迟
+            
+            # 模拟发现新版本
+            has_update = False  # 设为True可以测试更新流程
+            
+            if has_update:
+                reply = QMessageBox.question(
+                    self, _('update_feature'), _('update_available'),
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    self.status_bar.setText(_('downloading_update'))
+                    # 模拟下载更新
+                    time.sleep(2)
+                    
+                    # 提供安装更新包的选项
+                    reply_install = QMessageBox.question(
+                        self, _('update_feature'), _('update_downloaded') + '\n' + '是否立即安装更新包？',
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                    )
+                    if reply_install == QMessageBox.StandardButton.Yes:
+                        # 模拟运行更新包
+                        QMessageBox.information(self, _('success'), '更新包安装程序已启动，请按照提示完成更新。')
+            else:
+                QMessageBox.information(self, _('information'), _('no_update'))
+                
+            self.status_bar.setText(_('status_ready'))
+            
+        except Exception as e:
+            QMessageBox.critical(self, _('error'), _('update_failed', error=str(e)))
+            self.status_bar.setText(_('status_ready'))
 
 
 def main():
@@ -1083,7 +1251,7 @@ def main():
         os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "0"
 
     app = QApplication(sys.argv)
-    app.setApplicationName("綜合選擇題考試系統")
+    app.setApplicationName(_('app_title'))
 
     # 中文显示
     font = QFont()

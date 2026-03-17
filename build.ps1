@@ -5,7 +5,7 @@ Remove-Item -Recurse -Force build, dist, installer_dist, portable_dist -ErrorAct
 New-Item -ItemType Directory -Path installer_dist, portable_dist -Force
 
 # 生成移动版
-pyinstaller --onefile --noconsole main.py
+pyinstaller --onefile --noconsole --hidden-import=PyPDF2 main.py
 
 # 复制到移动版目录
 if (Test-Path "dist\main.exe") {

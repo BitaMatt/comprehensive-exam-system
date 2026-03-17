@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build files
+build/
+dist/
+installer_dist/
+portable_dist/
+*.spec
+
+# IDE
+.idea/
+*.iml
+
+# Records
+*.json
+
+# Inno Setup
+*.exe
+
+# Misc
+*.ico
+*.log
