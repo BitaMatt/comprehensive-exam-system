@@ -1,12 +1,14 @@
 [Setup]
 AppName=綜合選擇題考試系統
-AppVersion=1.0
+AppVersion=1.1
 DefaultDirName=C:\綜合選擇題考試系統
 DefaultGroupName=綜合選擇題考試系統
 OutputDir=installer_dist
 OutputBaseFilename=綜合選擇題考試系統安装包
 Compression=lzma
 SolidCompression=yes
+AllowNoIcons=yes
+DisableDirPage=no
 
 [Files]
 Source: "dist\main.exe"; DestDir: "{app}"; Flags: ignoreversion
