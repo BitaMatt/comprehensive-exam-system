@@ -1,3 +1,8 @@
-PyQt6
-PyPDF2
+kivy>=2.1.0
+kivy-deps.angle
+kivy-deps.glew
+kivy-deps.sdl2
+pygments
 requests
+PyPDF2
+pillow

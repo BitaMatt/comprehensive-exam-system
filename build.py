@@ -6,7 +6,7 @@ import glob
 def main():
     print("清理之前的打包文件...")
     # 清理之前的打包文件
-    for dir_name in ['build', 'dist', 'installer_dist', 'portable_dist']:
+    for dir_name in ['build', 'dist', 'installer_dist', 'portable_dist', '.buildozer']:
         if os.path.exists(dir_name):
             try:
                 shutil.rmtree(dir_name)
@@ -28,32 +28,23 @@ def main():
     ], check=True)
     
     print("复制到移动版目录...")
-    # 获取当前目录的绝对路径
-    current_dir = os.getcwd()
-    print(f"当前目录: {current_dir}")
-    
-    # 查看当前目录的实际内容
-    print("当前目录内容:")
-    for entry in os.scandir(current_dir):
-        print(f"  {entry.name} (类型: {entry.stat().st_mode})")
-    
     # 复制到移动版目录
-    main_exe_path = os.path.join(current_dir, 'dist', 'main.exe')
+    main_exe_path = os.path.join(os.getcwd(), 'dist', 'main.exe')
     if os.path.exists(main_exe_path):
-        portable_dist_path = os.path.join(current_dir, 'portable_dist')
+        portable_dist_path = os.path.join(os.getcwd(), 'portable_dist')
         shutil.copy(main_exe_path, portable_dist_path)
         print("已复制main.exe到移动版目录")
         
         # 尝试直接遍历当前目录，寻找类似题库的目录
         question_bank_dir = None
-        for entry in os.scandir(current_dir):
+        for entry in os.scandir(os.getcwd()):
             if entry.is_dir() and ('题库' in entry.name or '題庫' in entry.name):
                 question_bank_dir = entry.name
                 break
         
         if question_bank_dir:
             print(f"找到题库目录: {question_bank_dir}")
-            question_bank_path = os.path.join(current_dir, question_bank_dir)
+            question_bank_path = os.path.join(os.getcwd(), question_bank_dir)
             print(f"题库目录路径: {question_bank_path}")
             print(f"题库目录是否存在: {os.path.exists(question_bank_path)}")
             
@@ -84,8 +75,8 @@ def main():
     print("生成安装包...")
     # 生成安装包
     inno_paths = [
-        'C:\\Program Files (x86)\\Inno Setup 6\\iscc.exe',
-        'C:\\Program Files\\Inno Setup 6\\iscc.exe'
+        'C:\Program Files (x86)\Inno Setup 6\iscc.exe',
+        'C:\Program Files\Inno Setup 6\iscc.exe'
     ]
     inno_exe = None
     for path in inno_paths:
@@ -110,10 +101,61 @@ def main():
         print("Inno Setup 未找到，请安装 Inno Setup 6")
         return
     
+    print("打包Android APK...")
+    # 打包Android APK
+    try:
+        # 检查是否安装了buildozer
+        subprocess.run(['buildozer', '--version'], capture_output=True, check=True)
+        
+        # 初始化buildozer配置
+        if not os.path.exists('buildozer.spec'):
+            subprocess.run(['buildozer', 'init'], check=True)
+        
+        # 修改buildozer.spec配置
+        with open('buildozer.spec', 'r', encoding='utf-8') as f:
+            spec_content = f.read()
+        
+        # 更新配置
+        spec_content = spec_content.replace(
+            'package.name = myapp',
+            'package.name = exam_system'
+        )
+        spec_content = spec_content.replace(
+            'package.domain = org.test',
+            'package.domain = com.exam'
+        )
+        spec_content = spec_content.replace(
+            'source.dir = .',
+            'source.dir = .'
+        )
+        spec_content = spec_content.replace(
+            'requirements = python3,kivy',
+            'requirements = python3,kivy,requests,PyPDF2,pillow'
+        )
+        
+        # 写入更新后的配置
+        with open('buildozer.spec', 'w', encoding='utf-8') as f:
+            f.write(spec_content)
+        
+        # 构建APK
+        subprocess.run(['buildozer', 'android', 'debug', 'deploy', 'run'], check=True)
+        
+        # 复制APK到installer_dist目录
+        apk_files = glob.glob('.buildozer/android/platform/build/dists/exam_system/bin/*.apk')
+        if apk_files:
+            apk_path = apk_files[0]
+            apk_dest = os.path.join('installer_dist', 'exam_system.apk')
+            shutil.copy2(apk_path, apk_dest)
+            print(f"APK已生成：{apk_dest}")
+    except Exception as e:
+        print(f"打包Android APK失败：{e}")
+        print("请确保已安装Buildozer和Android SDK")
+    
     print("打包完成！")
     print("移动版位于：portable_dist")
     print("安装包位于：installer_dist")
     print("更新包位于：installer_dist（文件名为update-package.exe）")
+    print("Android APK位于：installer_dist（文件名为exam_system.apk）")
     
     # 自动git commit功能
     print("\n正在自动提交更改到git...")
