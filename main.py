@@ -5,6 +5,9 @@ import random
 from datetime import datetime
 from typing import List, Dict, Any
 
+# 版本号
+VERSION = "v1.0.0"
+
 # 导入多语言支持
 from translations import _
 
@@ -144,7 +147,7 @@ class ExamMainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(_('app_title'))
+        self.setWindowTitle(f"{_('app_title')} - {VERSION}")
         self.setMinimumSize(800, 600)
         self.resize(1000, 700)
 
@@ -1212,10 +1215,10 @@ class ExamMainWindow(QMainWindow):
             self.status_bar.setText(_('checking_update'))
             
             # 当前版本
-            current_version = "1.0.0"
+            current_version = VERSION.lstrip("v")
             
             # GitHub 仓库信息
-            repo_owner = "yourusername"  # 替换为你的 GitHub 用户名
+            repo_owner = "BitaMatt"  # 替换为你的 GitHub 用户名
             repo_name = "comprehensive-exam-system"  # 项目名称
             
             # 从 GitHub API 获取最新版本信息
