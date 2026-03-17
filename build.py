@@ -28,22 +28,32 @@ def main():
     ], check=True)
     
     print("复制到移动版目录...")
+    # 获取当前目录的绝对路径
+    current_dir = os.getcwd()
+    print(f"当前目录: {current_dir}")
+    
     # 复制到移动版目录
-    if os.path.exists('dist/main.exe'):
-        shutil.copy('dist/main.exe', 'portable_dist/')
+    main_exe_path = os.path.join(current_dir, 'dist', 'main.exe')
+    if os.path.exists(main_exe_path):
+        portable_dist_path = os.path.join(current_dir, 'portable_dist')
+        shutil.copy(main_exe_path, portable_dist_path)
         print("已复制main.exe到移动版目录")
         
         # 检查题库目录是否存在
-        print(f"题库目录是否存在: {os.path.exists('题库')}")
-        if os.path.exists('题库'):
-            print(f"题库目录内容: {os.listdir('题库')}")
+        question_bank_path = os.path.join(current_dir, '题库')
+        print(f"题库目录路径: {question_bank_path}")
+        print(f"题库目录是否存在: {os.path.exists(question_bank_path)}")
+        
+        if os.path.exists(question_bank_path):
+            print(f"题库目录内容: {os.listdir(question_bank_path)}")
             # 确保portable_dist/题库目录存在
-            os.makedirs('portable_dist/题库', exist_ok=True)
-            print("已创建portable_dist/题库目录")
+            portable_question_bank_path = os.path.join(portable_dist_path, '题库')
+            os.makedirs(portable_question_bank_path, exist_ok=True)
+            print(f"已创建portable_dist/题库目录: {portable_question_bank_path}")
             # 逐个复制文件
-            for file in os.listdir('题库'):
-                src = os.path.join('题库', file)
-                dst = os.path.join('portable_dist/题库', file)
+            for file in os.listdir(question_bank_path):
+                src = os.path.join(question_bank_path, file)
+                dst = os.path.join(portable_question_bank_path, file)
                 print(f"尝试复制: {src} -> {dst}")
                 if os.path.isfile(src):
                     shutil.copy2(src, dst)
@@ -53,7 +63,8 @@ def main():
         else:
             print("题库目录不存在，跳过复制")
     else:
-        print("dist/main.exe不存在，跳过复制")
+        print(f"dist/main.exe不存在: {main_exe_path}")
+        print("跳过复制")
     
     print("生成安装包...")
     # 生成安装包
