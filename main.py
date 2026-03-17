@@ -1216,7 +1216,7 @@ class ExamMainWindow(QMainWindow):
             
             # GitHub 仓库信息
             repo_owner = "yourusername"  # 替换为你的 GitHub 用户名
-            repo_name = "exam-system-choice"  # 项目名称
+            repo_name = "comprehensive-exam-system"  # 项目名称
             
             # 从 GitHub API 获取最新版本信息
             api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/latest"
