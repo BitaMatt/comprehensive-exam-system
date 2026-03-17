@@ -32,6 +32,11 @@ def main():
     current_dir = os.getcwd()
     print(f"当前目录: {current_dir}")
     
+    # 查看当前目录的实际内容
+    print("当前目录内容:")
+    for entry in os.scandir(current_dir):
+        print(f"  {entry.name} (类型: {entry.stat().st_mode})")
+    
     # 复制到移动版目录
     main_exe_path = os.path.join(current_dir, 'dist', 'main.exe')
     if os.path.exists(main_exe_path):
@@ -39,29 +44,39 @@ def main():
         shutil.copy(main_exe_path, portable_dist_path)
         print("已复制main.exe到移动版目录")
         
-        # 检查题库目录是否存在
-        question_bank_path = os.path.join(current_dir, '题库')
-        print(f"题库目录路径: {question_bank_path}")
-        print(f"题库目录是否存在: {os.path.exists(question_bank_path)}")
+        # 尝试直接遍历当前目录，寻找类似题库的目录
+        question_bank_dir = None
+        for entry in os.scandir(current_dir):
+            if entry.is_dir() and '题库' in entry.name:
+                question_bank_dir = entry.name
+                break
         
-        if os.path.exists(question_bank_path):
-            print(f"题库目录内容: {os.listdir(question_bank_path)}")
-            # 确保portable_dist/题库目录存在
-            portable_question_bank_path = os.path.join(portable_dist_path, '题库')
-            os.makedirs(portable_question_bank_path, exist_ok=True)
-            print(f"已创建portable_dist/题库目录: {portable_question_bank_path}")
-            # 逐个复制文件
-            for file in os.listdir(question_bank_path):
-                src = os.path.join(question_bank_path, file)
-                dst = os.path.join(portable_question_bank_path, file)
-                print(f"尝试复制: {src} -> {dst}")
-                if os.path.isfile(src):
-                    shutil.copy2(src, dst)
-                    print(f"已复制：{file}")
-                else:
-                    print(f"跳过非文件: {file}")
+        if question_bank_dir:
+            print(f"找到题库目录: {question_bank_dir}")
+            question_bank_path = os.path.join(current_dir, question_bank_dir)
+            print(f"题库目录路径: {question_bank_path}")
+            print(f"题库目录是否存在: {os.path.exists(question_bank_path)}")
+            
+            if os.path.exists(question_bank_path):
+                print(f"题库目录内容: {os.listdir(question_bank_path)}")
+                # 确保portable_dist/题库目录存在
+                portable_question_bank_path = os.path.join(portable_dist_path, '题库')
+                os.makedirs(portable_question_bank_path, exist_ok=True)
+                print(f"已创建portable_dist/题库目录: {portable_question_bank_path}")
+                # 逐个复制文件
+                for file in os.listdir(question_bank_path):
+                    src = os.path.join(question_bank_path, file)
+                    dst = os.path.join(portable_question_bank_path, file)
+                    print(f"尝试复制: {src} -> {dst}")
+                    if os.path.isfile(src):
+                        shutil.copy2(src, dst)
+                        print(f"已复制：{file}")
+                    else:
+                        print(f"跳过非文件: {file}")
+            else:
+                print("题库目录不存在，跳过复制")
         else:
-            print("题库目录不存在，跳过复制")
+            print("未找到题库目录，跳过复制")
     else:
         print(f"dist/main.exe不存在: {main_exe_path}")
         print("跳过复制")
