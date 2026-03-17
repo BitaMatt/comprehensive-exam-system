@@ -47,7 +47,7 @@ def main():
         # 尝试直接遍历当前目录，寻找类似题库的目录
         question_bank_dir = None
         for entry in os.scandir(current_dir):
-            if entry.is_dir() and '题库' in entry.name:
+            if entry.is_dir() and ('题库' in entry.name or '題庫' in entry.name):
                 question_bank_dir = entry.name
                 break
         
