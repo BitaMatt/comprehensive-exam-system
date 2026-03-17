@@ -11,6 +11,9 @@ from translations import _
 # 导入PDF处理库
 import PyPDF2
 
+# 导入网络请求库
+import requests
+
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QRadioButton, QButtonGroup, QLineEdit,
@@ -1208,32 +1211,67 @@ class ExamMainWindow(QMainWindow):
         try:
             self.status_bar.setText(_('checking_update'))
             
-            # 这里模拟检查更新
-            # 实际应用中，应该从服务器获取最新版本信息
-            import time
-            time.sleep(1)  # 模拟网络请求延迟
+            # 当前版本
+            current_version = "1.0.0"
             
-            # 模拟发现新版本
-            has_update = False  # 设为True可以测试更新流程
+            # GitHub 仓库信息
+            repo_owner = "yourusername"  # 替换为你的 GitHub 用户名
+            repo_name = "exam-system-choice"  # 项目名称
             
-            if has_update:
-                reply = QMessageBox.question(
-                    self, _('update_feature'), _('update_available'),
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
-                if reply == QMessageBox.StandardButton.Yes:
-                    self.status_bar.setText(_('downloading_update'))
-                    # 模拟下载更新
-                    time.sleep(2)
-                    
-                    # 提供安装更新包的选项
-                    reply_install = QMessageBox.question(
-                        self, _('update_feature'), _('update_downloaded') + '\n' + '是否立即安装更新包？',
+            # 从 GitHub API 获取最新版本信息
+            api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/latest"
+            response = requests.get(api_url, timeout=10)
+            
+            if response.status_code == 200:
+                release_info = response.json()
+                latest_version = release_info["tag_name"].lstrip("v")  # 移除 v 前缀
+                download_url = None
+                
+                # 查找更新包下载链接
+                for asset in release_info.get("assets", []):
+                    if asset["name"].endswith(".exe") and "update" in asset["name"].lower():
+                        download_url = asset["browser_download_url"]
+                        break
+                
+                # 比较版本号
+                if latest_version > current_version and download_url:
+                    # 有更新
+                    reply = QMessageBox.question(
+                        self, _('update_feature'), 
+                        f"发现新版本 v{latest_version}！是否下载更新？\n\n{release_info.get('body', '')}",
                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
                     )
-                    if reply_install == QMessageBox.StandardButton.Yes:
-                        # 模拟运行更新包
-                        QMessageBox.information(self, _('success'), '更新包安装程序已启动，请按照提示完成更新。')
+                    if reply == QMessageBox.StandardButton.Yes:
+                        self.status_bar.setText(_('downloading_update'))
+                        
+                        # 下载更新包
+                        update_file = os.path.join(os.path.dirname(sys.executable), "update.exe")
+                        response = requests.get(download_url, stream=True)
+                        
+                        # 显示下载进度
+                        total_size = int(response.headers.get('content-length', 0))
+                        downloaded_size = 0
+                        
+                        with open(update_file, 'wb') as f:
+                            for chunk in response.iter_content(chunk_size=8192):
+                                if chunk:
+                                    f.write(chunk)
+                                    downloaded_size += len(chunk)
+                                    progress = int((downloaded_size / total_size) * 100)
+                                    self.status_bar.setText(f"下载更新中... {progress}%")
+                        
+                        # 提示安装
+                        reply_install = QMessageBox.question(
+                            self, _('update_feature'), _('update_downloaded') + '\n' + '是否立即安装更新包？',
+                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                        )
+                        if reply_install == QMessageBox.StandardButton.Yes:
+                            # 运行更新包
+                            os.startfile(update_file)
+                            # 退出当前程序
+                            QApplication.quit()
+                else:
+                    QMessageBox.information(self, _('information'), _('no_update'))
             else:
                 QMessageBox.information(self, _('information'), _('no_update'))
                 
