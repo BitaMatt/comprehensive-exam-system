@@ -31,16 +31,29 @@ def main():
     # 复制到移动版目录
     if os.path.exists('dist/main.exe'):
         shutil.copy('dist/main.exe', 'portable_dist/')
+        print("已复制main.exe到移动版目录")
+        
+        # 检查题库目录是否存在
+        print(f"题库目录是否存在: {os.path.exists('题库')}")
         if os.path.exists('题库'):
+            print(f"题库目录内容: {os.listdir('题库')}")
             # 确保portable_dist/题库目录存在
             os.makedirs('portable_dist/题库', exist_ok=True)
+            print("已创建portable_dist/题库目录")
             # 逐个复制文件
             for file in os.listdir('题库'):
                 src = os.path.join('题库', file)
                 dst = os.path.join('portable_dist/题库', file)
+                print(f"尝试复制: {src} -> {dst}")
                 if os.path.isfile(src):
                     shutil.copy2(src, dst)
                     print(f"已复制：{file}")
+                else:
+                    print(f"跳过非文件: {file}")
+        else:
+            print("题库目录不存在，跳过复制")
+    else:
+        print("dist/main.exe不存在，跳过复制")
     
     print("生成安装包...")
     # 生成安装包
