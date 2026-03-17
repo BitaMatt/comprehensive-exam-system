@@ -6,10 +6,64 @@ from datetime import datetime
 from typing import List, Dict, Any
 
 # 版本号
-VERSION = "v1.0.0"
+VERSION = "v1.1.0"
+
+# 激励用语列表
+MOTIVATIONAL_QUOTES = [
+    "🌟 相信自己，你一定能行！",
+    "💪 每一次练习都是进步的机会",
+    "🎯 目标就在前方，加油！",
+    "🔥 坚持就是胜利",
+    "📚 知识就是力量",
+    "🚀 努力的人运气不会差",
+    "🌈 今天的努力，明天的收获",
+    "🎓 学习是终身的事业",
+    "💎 越努力，越幸运",
+    "🌟 成功属于坚持到底的人"
+]
 
 # 导入多语言支持
 from translations import _
+
+# 导入PDF处理库
+import PyPDF2
+
+# 导入网络请求库
+import requests
+
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QPushButton, QRadioButton, QButtonGroup, QLineEdit,
+    QTextEdit, QMessageBox, QTabWidget, QTableWidget, QTableWidgetItem,
+    QHeaderView, QProgressBar, QComboBox, QInputDialog, QDialog,
+    QDialogButtonBox, QFormLayout, QGroupBox, QCheckBox, QFileDialog
+)
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QFont, QPalette, QColor, QIcon
+
+# 自定义RadioButton，支持双击事件
+class DoubleClickRadioButton(QRadioButton):
+    doubleClicked = pyqtSignal()
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.click_count = 0
+        self.timer = QTimer(self)
+        self.timer.setSingleShot(True)
+        self.timer.timeout.connect(self.reset_click_count)
+    
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        self.click_count += 1
+        if self.click_count == 1:
+            self.timer.start(300)  # 300ms内的两次点击视为双击
+        elif self.click_count == 2:
+            self.timer.stop()
+            self.doubleClicked.emit()
+            self.reset_click_count()
+    
+    def reset_click_count(self):
+        self.click_count = 0
 
 # 导入PDF处理库
 import PyPDF2
@@ -177,6 +231,12 @@ class ExamMainWindow(QMainWindow):
         self.status_bar.setStyleSheet("background-color: #f0f0f0; padding: 8px; border-radius: 4px;")
         main_layout.addWidget(self.status_bar)
 
+        # 激励用语栏
+        self.motivation_label = QLabel()
+        self.motivation_label.setStyleSheet("background-color: #e3f2fd; padding: 10px; border-radius: 4px; font-size: 14px; text-align: center;")
+        self.update_motivation()
+        main_layout.addWidget(self.motivation_label)
+
         # 顶部按钮栏
         top_btn_layout = QHBoxLayout()
         # 检查更新按钮
@@ -343,10 +403,16 @@ class ExamMainWindow(QMainWindow):
 
         # 选项区域
         self.option_group = QButtonGroup(self)
-        self.opt_a = QRadioButton()
-        self.opt_b = QRadioButton()
-        self.opt_c = QRadioButton()
-        self.opt_d = QRadioButton()
+        self.opt_a = DoubleClickRadioButton()
+        self.opt_b = DoubleClickRadioButton()
+        self.opt_c = DoubleClickRadioButton()
+        self.opt_d = DoubleClickRadioButton()
+
+        # 添加双击事件处理
+        self.opt_a.doubleClicked.connect(self.submit_answer)
+        self.opt_b.doubleClicked.connect(self.submit_answer)
+        self.opt_c.doubleClicked.connect(self.submit_answer)
+        self.opt_d.doubleClicked.connect(self.submit_answer)
 
         self.option_group.addButton(self.opt_a, 0)
         self.option_group.addButton(self.opt_b, 1)
@@ -804,11 +870,13 @@ class ExamMainWindow(QMainWindow):
             self.opt_c.setText(f"C. {q['options']['C']}")
             self.opt_d.setText(f"D. {q['options']['D']}")
 
-            # 取消选中
+            # 取消选中（使用ButtonGroup的setExclusive(False)来确保完全取消选中）
+            self.option_group.setExclusive(False)
             self.opt_a.setChecked(False)
             self.opt_b.setChecked(False)
             self.opt_c.setChecked(False)
             self.opt_d.setChecked(False)
+            self.option_group.setExclusive(True)
 
             # 清空输入框
             self.answer_input.clear()
@@ -1208,6 +1276,26 @@ class ExamMainWindow(QMainWindow):
             questions.append(current_question)
 
         return questions
+
+    def update_motivation(self):
+        """更新激励用语"""
+        try:
+            # 尝试从网络获取心灵鸡汤
+            response = requests.get("https://api.quotable.io/random", timeout=3)
+            if response.status_code == 200:
+                data = response.json()
+                quote = data.get("content", "")
+                author = data.get("author", "")
+                if quote:
+                    self.motivation_label.setText(f"🌟 {quote} - {author}")
+                    return
+        except:
+            # 网络不可用时使用本地激励用语
+            pass
+        
+        # 使用本地激励用语
+        quote = random.choice(MOTIVATIONAL_QUOTES)
+        self.motivation_label.setText(quote)
 
     def check_for_updates(self):
         """检查软件更新"""
