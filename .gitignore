@@ -9,6 +9,7 @@ dist/
 installer_dist/
 portable_dist/
 *.spec
+!buildozer.spec
 
 # IDE
 .idea/
@@ -23,3 +24,11 @@ portable_dist/
 # Misc
 *.ico
 *.log
+
+# Buildozer
+.buildozer/
+buildozer_env/
+buildozer_venv/
+python-for-android/
+python-for-android.zip
+Ubuntu.appx
