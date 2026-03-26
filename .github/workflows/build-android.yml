@@ -32,6 +32,16 @@ jobs:
         ls -la $ANDROID_SDK_ROOT/build-tools || true
     - name: Build APK
       run: |
+        export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
+        export ANDROID_HOME=/usr/local/lib/android/sdk
+        export ANDROID_NDK_ROOT=/usr/local/lib/android/sdk/ndk/27.3.13750724
+        echo "Buildozer version: $(buildozer --version)"
+        echo "Python version: $(python --version)"
+        echo "Java version: $(java --version)"
+        echo "Android SDK root: $ANDROID_SDK_ROOT"
+        echo "Android NDK root: $ANDROID_NDK_ROOT"
+        ls -la $ANDROID_SDK_ROOT/build-tools || true
+        ls -la $ANDROID_SDK_ROOT/platforms || true
         buildozer android debug -v
     
     - name: Upload APK
