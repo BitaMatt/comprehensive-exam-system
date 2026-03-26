@@ -2,6 +2,7 @@ import sys
 import json
 import os
 import random
+import re
 from datetime import datetime
 from typing import List, Dict, Any
 
@@ -511,6 +512,11 @@ class ExamMainWindow(QMainWindow):
         self.import_pdf_btn.clicked.connect(self.import_pdf_questions)
         btn_layout.addWidget(self.import_pdf_btn)
 
+        # 批量PDF导入按钮
+        self.batch_import_pdf_btn = QPushButton(_('batch_import_pdf'))
+        self.batch_import_pdf_btn.clicked.connect(self.import_pdfs_from_folder)
+        btn_layout.addWidget(self.batch_import_pdf_btn)
+
         layout.addLayout(btn_layout)
 
         # 题库表格（增加所属考试列）
@@ -654,8 +660,8 @@ class ExamMainWindow(QMainWindow):
         QMessageBox.information(self, _('success'), _('banks_refreshed'))
 
     def is_valid_question(self, question: Dict) -> bool:
-        """验证题目格式是否有效"""
-        required_fields = ["id", "question", "options", "answer"]
+        """验证题目格式是否有效（降低要求，从PDF导入的题目不需要所有选项都有内容）"""
+        required_fields = ["id", "question", "options"]
         for field in required_fields:
             if field not in question:
                 return False
@@ -664,14 +670,16 @@ class ExamMainWindow(QMainWindow):
                 opt in question["options"] for opt in ["A", "B", "C", "D"]):
             return False
 
-        if question["answer"] not in ["A", "B", "C", "D"]:
+        # 只要有1个以上选项有内容即可
+        if not question["question"].strip():
             return False
 
-        if not question["question"].strip() or any(
-                not question["options"][opt].strip() for opt in ["A", "B", "C", "D"]):
-            return False
+        # 只要至少有一个选项有内容
+        has_valid_option = any(
+            question["options"][opt].strip() for opt in ["A", "B", "C", "D"]
+        )
 
-        return True
+        return has_valid_option
 
     def save_question_bank(self):
         """保存题库到文件"""
@@ -1169,36 +1177,34 @@ class ExamMainWindow(QMainWindow):
         """从PDF文件导入题目"""
         try:
             # 打开文件选择对话框
-            file_name, _ = QFileDialog.getOpenFileName(
+            file_name, selected_filter = QFileDialog.getOpenFileName(
                 self, _('select_pdf'), '', 'PDF Files (*.pdf)'
             )
             if not file_name:
                 return
 
-            # 打开PDF文件
-            with open(file_name, 'rb') as file:
-                reader = PyPDF2.PdfReader(file)
-                text = ''
-                for page_num in range(len(reader.pages)):
-                    page = reader.pages[page_num]
-                    text += page.extract_text()
+            # 提取PDF文本（支持OCR）
+            text = self.extract_pdf_text(file_name)
 
-            # 简单的题目提取逻辑（实际应用中可能需要更复杂的解析）
+            # 解析题目
             questions = self.parse_pdf_text(text)
 
             if not questions:
                 QMessageBox.warning(self, _('warning'), "未从PDF中提取到题目")
                 return
 
-            # 选择或创建题库
+            # 从文件名自动识别题库名称和考试类型
+            bank_name, exam_group = self.extract_info_from_filename(file_name)
+
+            # 确认或修改题库信息
             bank_name, ok = QInputDialog.getText(
-                self, _('create_bank'), _('bank_name_input')
+                self, _('create_bank'), _('bank_name_input'), text=bank_name
             )
             if not ok or not bank_name.strip():
                 return
 
             exam_group, ok = QInputDialog.getText(
-                self, _('create_bank'), _('exam_group_input'), text="卷一"
+                self, _('create_bank'), _('exam_group_input'), text=exam_group
             )
             if not ok or not exam_group.strip():
                 return
@@ -1225,57 +1231,387 @@ class ExamMainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, _('error'), _('pdf_import_failed', error=str(e)))
 
+    def clean_pdf_text(self, text):
+        """清洗PDF文本，去除多余的空白字符和特殊字符"""
+        import re
+        # 去除多余的空白字符
+        text = re.sub(r'\s+', ' ', text)
+        # 去除特殊字符
+        text = re.sub(r'[\x00-\x1f\x7f]', '', text)
+        # 替换全角字符为半角
+        full_to_half = {}
+        for i in range(65281, 65375):
+            full_to_half[chr(i)] = chr(i - 65248)
+        full_to_half[chr(12288)] = ' '  # 全角空格
+        text = ''.join([full_to_half.get(c, c) for c in text])
+        return text
+
+    def _parse_options(self, text, question):
+        """解析选项文本"""
+        import re
+        # 分割选项
+        options = re.split(r'([A-D]\.)', text)
+        for i in range(1, len(options), 2):
+            if i + 1 < len(options):
+                option_letter = options[i][0]
+                option_text = options[i+1].strip()
+                # 去除选项后的其他选项标记和无关内容
+                option_text = re.split(r'[A-D]\.|只供內部使⽤|\d+\.', option_text)[0].strip()
+                if option_letter in ["A", "B", "C", "D"]:
+                    question["options"][option_letter] = option_text
+
+    def _parse_options_ocr(self, text, question):
+        """解析OCR识别后的选项文本（支持小写字母）"""
+        import re
+        # 分割选项（支持小写字母格式如 a) 或 a﹚）
+        options = re.split(r'([a-d]\)|[a-d]﹚)', text)
+        for i in range(1, len(options), 2):
+            if i + 1 < len(options):
+                option_letter = options[i][0].upper()  # 转换为大写
+                option_text = options[i+1].strip()
+                # 去除选项后的其他选项标记和无关内容
+                option_text = re.split(r'[a-d]\)|[a-d]﹚|\d+\.', option_text)[0].strip()
+                if option_letter in ["A", "B", "C", "D"]:
+                    question["options"][option_letter] = option_text
+
+    def extract_pdf_text(self, pdf_path):
+        """从PDF文件提取文本，支持传统提取和OCR"""
+        try:
+            # 首先尝试使用PyPDF2提取文本
+            with open(pdf_path, 'rb') as file:
+                reader = PyPDF2.PdfReader(file)
+                text = ''
+                for page_num in range(len(reader.pages)):
+                    page = reader.pages[page_num]
+                    text += page.extract_text()
+            
+            # 如果提取的文本太短，尝试使用pdfminer
+            if len(text.strip()) < 100:
+                try:
+                    from pdfminer.high_level import extract_text
+                    text = extract_text(pdf_path)
+                except ImportError:
+                    pass
+            
+            # 如果仍然提取失败，或者文本质量不好，使用EasyOCR
+            if len(text.strip()) < 100:
+                try:
+                    import tempfile
+                    import os
+                    
+                    # 临时添加poppler路径
+                    poppler_path = r'C:\poppler\Library\bin'
+                    if poppler_path not in os.environ['PATH']:
+                        os.environ['PATH'] = poppler_path + ';' + os.environ['PATH']
+                    
+                    from pdf2image import convert_from_path
+                    
+                    # 将PDF转换为图像
+                    images = convert_from_path(pdf_path, dpi=300, poppler_path=poppler_path)
+                    text = ''
+                    
+                    # 使用EasyOCR
+                    import easyocr
+                    reader = easyocr.Reader(['ch_tra', 'en'], gpu=False)
+                    
+                    # 对每页进行OCR
+                    for image in images:
+                        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
+                            temp_image_path = temp_file.name
+                        image.save(temp_image_path)
+                        
+                        # 使用EasyOCR进行识别
+                        result = reader.readtext(temp_image_path)
+                        
+                        # 提取文本，每行一个文本块
+                        page_text = ""
+                        for detection in result:
+                            page_text += detection[1] + "\n"
+                        
+                        text += page_text
+                        
+                        # 清理临时文件
+                        os.unlink(temp_image_path)
+                except Exception as e:
+                    print(f"OCR失败: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+            
+            return text
+        except Exception as e:
+            print(f"提取PDF文本失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return ""
+
     def parse_pdf_text(self, text):
         """解析PDF文本，提取题目"""
-        # 这里实现简单的题目提取逻辑
-        # 实际应用中可能需要根据PDF的具体格式进行调整
+        import re
+        
         questions = []
+        answers = []
+
+        # 首先提取所有答案（通常在文件末尾）
+        answer_match = re.search(r'\d+([A-D]+)', text)
+        if answer_match:
+            answers = list(answer_match.group(1))
+        
+        # 方式3：优先使用OCR识别后的特殊格式处理（专门针对EasyOCR输出优化）
+        # 按行分割处理OCR文本
         lines = text.split('\n')
         current_question = None
-        question_id = 1
-
+        current_question_text = ""
+        current_options = {}
+        current_roman_numerals = []
+        pending_option_letter = None  # 等待内容的选项字母
+        
         for line in lines:
             line = line.strip()
             if not line:
                 continue
-
-            # 检测题目开始
-            if line.endswith('?') or line.endswith('？'):
-                if current_question:
-                    # 保存上一题
-                    if self.is_valid_question(current_question):
-                        questions.append(current_question)
+            
+            # 过滤掉页眉页脚等无关内容
+            if any(keyword in line for keyword in ['GI', 'GII', 'GI/', 'GII/', '般保險', '第一章']):
+                continue
+            
+            # 如果有pending选项，这行就是选项内容
+            if pending_option_letter:
+                current_options[pending_option_letter] = line
+                pending_option_letter = None
+                continue
+            
+            # 检测题目编号（如 1. 或 1﹒ 或 13. 或只有数字1）
+            match = re.match(r'^(\d+)\s*[﹒\.]?', line)
+            if match:
+                # 保存上一题
+                if current_question and current_question_text.strip():
+                    questions.append({
+                        "id": current_question,
+                        "question": current_question_text.strip(),
+                        "options": {
+                            "A": current_options.get('A', ''),
+                            "B": current_options.get('B', ''),
+                            "C": current_options.get('C', ''),
+                            "D": current_options.get('D', '')
+                        },
+                        "answer": "",
+                        "analysis": ""
+                    })
                 
                 # 开始新题目
-                current_question = {
-                    "id": str(question_id),
-                    "question": line,
-                    "options": {"A": "", "B": "", "C": "", "D": ""},
-                    "answer": "",
-                    "analysis": ""
-                }
-                question_id += 1
+                current_question = match.group(1)
+                # 提取题目内容（去除编号后的剩余部分）
+                q_text = re.sub(r'^(\d+)\s*[﹒\.]?', '', line).strip()
+                current_question_text = q_text
+                current_options = {}
+                current_roman_numerals = []
+                pending_option_letter = None
+                continue
             
-            # 检测选项
-            elif current_question:
-                if line.startswith('A.') or line.startswith('A、'):
-                    current_question["options"]["A"] = line[2:].strip()
-                elif line.startswith('B.') or line.startswith('B、'):
-                    current_question["options"]["B"] = line[2:].strip()
-                elif line.startswith('C.') or line.startswith('C、'):
-                    current_question["options"]["C"] = line[2:].strip()
-                elif line.startswith('D.') or line.startswith('D、'):
-                    current_question["options"]["D"] = line[2:].strip()
-                elif line.startswith('答案：') or line.startswith('答案:'):
-                    answer = line[3:].strip()
-                    if answer in ["A", "B", "C", "D"]:
-                        current_question["answer"] = answer
-
+            # 检测选项（多种格式：a), a﹚, a, a.等）
+            # 支持a), a﹚, a., a﹒, 或只有a后面没有内容
+            option_match = re.match(r'^([a-d])\s*[)﹚\.﹒]?\s*$', line)
+            if option_match:
+                # 这行只有选项标记，没有内容，等待下一行
+                pending_option_letter = option_match.group(1).upper()
+                continue
+            
+            # 检测选项（a)后面直接跟内容在同一行）
+            option_match_with_content = re.match(r'^([a-d])\s*[)﹚\.﹒]?\s*(.+)$', line)
+            if option_match_with_content:
+                option_letter = option_match_with_content.group(1).upper()
+                option_text = option_match_with_content.group(2).strip()
+                current_options[option_letter] = option_text
+                continue
+            
+            # 检测罗马数字（i, ii, iii, iv, v, vi）
+            roman_match = re.match(r'^([iIvVxX]+)\s*[)﹚\.﹒]?\s*', line)
+            if roman_match:
+                roman_num = roman_match.group(1)
+                roman_text = re.sub(r'^([iIvVxX]+)\s*[)﹚\.﹒]?\s*', '', line).strip()
+                current_roman_numerals.append(f"{roman_num} {roman_text}")
+                # 罗马数字可能属于题目内容
+                if current_question and len(current_options) == 0 and pending_option_letter is None:
+                    if current_question_text:
+                        current_question_text += " "
+                    current_question_text += f"{roman_num} {roman_text}"
+                continue
+            
+            # 其他行作为题目内容或选项内容
+            if current_question:
+                if len(current_options) == 0 and pending_option_letter is None:
+                    # 还没有选项，继续累积题目内容
+                    if current_question_text:
+                        current_question_text += " "
+                    current_question_text += line
+        
         # 保存最后一题
-        if current_question and self.is_valid_question(current_question):
-            questions.append(current_question)
+        if current_question and current_question_text.strip():
+            questions.append({
+                "id": current_question,
+                "question": current_question_text.strip(),
+                "options": {
+                    "A": current_options.get('A', ''),
+                    "B": current_options.get('B', ''),
+                    "C": current_options.get('C', ''),
+                    "D": current_options.get('D', '')
+                },
+                "answer": "",
+                "analysis": ""
+            })
+        
+        # 如果方式3没有提取到题目，尝试其他方式
+        if not questions:
+            # 清洗文本
+            text = self.clean_pdf_text(text)
+            
+            # 方式1：按题目编号分割（数字+点）
+            parts = re.split(r'(\d+)\.', text)
+            
+            # 处理分割后的部分
+            for i in range(1, len(parts), 2):
+                if i + 1 < len(parts):
+                    q_id = parts[i]
+                    content = parts[i + 1].strip()
+                    
+                    # 分离题目和选项
+                    question_end = content.find('?')
+                    if question_end == -1:
+                        question_end = content.find('？')
+                    
+                    if question_end != -1:
+                        q_text = content[:question_end + 1].strip()
+                        options_text = content[question_end + 1:].strip()
+                        
+                        # 创建题目对象
+                        question = {
+                            "id": q_id,
+                            "question": q_text,
+                            "options": {"A": "", "B": "", "C": "", "D": ""},
+                            "answer": "",
+                            "analysis": ""
+                        }
+                        
+                        # 解析选项
+                        self._parse_options(options_text, question)
+                        
+                        # 验证题目（降低要求，只要有选项就行）
+                        if question["question"].strip() and any(opt.strip() for opt in question["options"].values()):
+                            questions.append(question)
+        
+        # 分配答案
+        if answers and questions:
+            for i, q in enumerate(questions):
+                if i < len(answers):
+                    q["answer"] = answers[i]
 
         return questions
+
+    def extract_info_from_filename(self, file_path):
+        """从PDF文件名提取题库名称和考试类型"""
+        import os
+        import re
+        
+        # 获取文件名（不含路径和扩展名）
+        filename = os.path.basename(file_path)
+        filename = os.path.splitext(filename)[0]
+        
+        # 默认值
+        bank_name = filename
+        exam_group = "卷一"
+        
+        # 尝试从文件名中提取考试类型
+        # 匹配模式：卷一、卷二、卷三、卷四、卷五
+        exam_match = re.search(r'卷([一二三四五])', filename)
+        if exam_match:
+            exam_group = f"卷{exam_match.group(1)}"
+        
+        # 尝试提取更详细的信息
+        # 例如：4C中介人考試_卷五 投資相連長期保險 試題
+        parts = filename.split('_')
+        if len(parts) > 1:
+            bank_name = '_'.join(parts[1:])
+        
+        return bank_name, exam_group
+
+    def import_pdfs_from_folder(self):
+        """从PDFs文件夹批量导入题目"""
+        try:
+            import os
+            
+            # 获取PDFs文件夹路径
+            pdfs_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "PDFs")
+            if not os.path.exists(pdfs_folder):
+                QMessageBox.warning(self, _('warning'), "PDFs文件夹不存在")
+                return
+            
+            # 获取文件夹中的PDF文件
+            pdf_files = [f for f in os.listdir(pdfs_folder) if f.lower().endswith('.pdf')]
+            if not pdf_files:
+                QMessageBox.warning(self, _('warning'), "PDFs文件夹中没有PDF文件")
+                return
+            
+            # 处理每个PDF文件
+            success_count = 0
+            failure_count = 0
+            
+            for pdf_file in pdf_files:
+                try:
+                    pdf_path = os.path.join(pdfs_folder, pdf_file)
+                    
+                    # 提取PDF文本（支持OCR）
+                    text = self.extract_pdf_text(pdf_path)
+                    
+                    # 解析题目
+                    questions = self.parse_pdf_text(text)
+                    
+                    if not questions:
+                        failure_count += 1
+                        continue
+                    
+                    # 从文件名提取信息
+                    bank_name, exam_group = self.extract_info_from_filename(pdf_path)
+                    
+                    # 检查是否已存在同名题库
+                    if bank_name in self.raw_question_banks:
+                        # 询问是否覆盖
+                        reply = QMessageBox.question(
+                            self, "确认", f"题库 '{bank_name}' 已存在，是否覆盖？",
+                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                        )
+                        if reply != QMessageBox.StandardButton.Yes:
+                            failure_count += 1
+                            continue
+                    
+                    # 创建或更新题库
+                    self.raw_question_banks[bank_name] = {
+                        "file_name": f"{bank_name}.json",
+                        "exam_group": exam_group,
+                        "questions": questions
+                    }
+                    
+                    success_count += 1
+                    
+                except Exception as e:
+                    print(f"处理文件 {pdf_file} 时出错: {str(e)}")
+                    failure_count += 1
+            
+            # 保存题库
+            self.save_question_bank()
+            
+            # 刷新题库
+            self.load_and_group_question_banks()
+            self.load_bank_to_table()
+            self.update_target_combobox()
+            
+            # 显示结果
+            QMessageBox.information(
+                self, _('success'), 
+                f"批量导入完成！\n成功: {success_count} 个文件\n失败: {failure_count} 个文件"
+            )
+            
+        except Exception as e:
+            QMessageBox.critical(self, _('error'), f"批量导入失败: {str(e)}")
 
     def update_motivation(self):
         """更新激励用语"""
