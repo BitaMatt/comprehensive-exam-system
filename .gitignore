@@ -8,14 +8,37 @@ build/
 dist/
 installer_dist/
 portable_dist/
+release_artifacts/
 *.spec
+*.apk
+*.aab
+*.zip
+*.msix
 
 # IDE
 .idea/
 *.iml
 
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+
 # Records
 *.json
+!assets/question_banks/*.json
+
+# Secrets / local config
+.env
+.env.*
+config.py
+key.properties
+android/key.properties
+*.jks
+*.keystore
+*.p12
+*.pem
 
 # Inno Setup
 *.exe
@@ -23,3 +46,25 @@ portable_dist/
 # Misc
 *.ico
 *.log
+
+# Virtual environment
+.venv/
+venv/
+
+# Trae IDE
+.trae/
+
+# PDF files
+PDFs/
+
+# Buildozer
+buildozer_env/
+buildozer_venv/
+
+# Python for Android
+python-for-android/
+
+# Test files
+test_*.py
+analyze_*.py
+improve_*.py
