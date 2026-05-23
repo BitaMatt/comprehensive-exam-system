@@ -15,13 +15,13 @@
 
 ## 当前版本
 
-当前版本：`v1.2.0`
+当前版本：`v1.2.1`
 
 本版本安装包输出目录：
 
-- Windows 安装包：`out/comprehensive-exam-system-windows-setup-v1.2.0.exe`
-- Windows 便携包：`out/comprehensive-exam-system-windows-portable-v1.2.0.zip`
-- Android 安装包：`out/comprehensive-exam-system-android-v1.2.0.apk`
+- Windows 安装包：`out/comprehensive-exam-system-windows-setup-v1.2.1.exe`
+- Windows 便携包：`out/comprehensive-exam-system-windows-portable-v1.2.1.zip`
+- Android 安装包：`out/comprehensive-exam-system-android-v1.2.1.apk`
 
 ## 开发与构建
 

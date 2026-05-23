@@ -1,7 +1,7 @@
 name: comprehensive_exam_system
 description: "跨 Windows 和 Android 的综合考试练习系统。"
 publish_to: 'none'
-version: 1.2.0+2
+version: 1.2.1+3
 
 environment:
   sdk: ^3.12.0

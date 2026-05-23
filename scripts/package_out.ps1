@@ -1,7 +1,7 @@
 param(
     [ValidateSet("all", "windows", "android")]
     [string]$Target = "all",
-    [string]$Version = "v1.2.0"
+    [string]$Version = "v1.2.1"
 )
 
 $ErrorActionPreference = "Stop"

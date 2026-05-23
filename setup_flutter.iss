@@ -1,12 +1,12 @@
 [Setup]
 AppId={{2A6F2FA9-82AD-4BB6-B69F-9D66B97E45BE}
 AppName=考试练习系统
-AppVersion=1.2.0
+AppVersion=1.2.1
 AppPublisher=BitaMatt
 DefaultDirName={autopf}\ComprehensiveExamSystem
 DefaultGroupName=考试练习系统
 OutputDir=out
-OutputBaseFilename=comprehensive-exam-system-windows-setup-v1.2.0
+OutputBaseFilename=comprehensive-exam-system-windows-setup-v1.2.1
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern

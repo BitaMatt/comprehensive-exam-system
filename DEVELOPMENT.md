@@ -85,9 +85,9 @@ powershell -ExecutionPolicy Bypass -File scripts\package_out.ps1 -Target android
 输出文件：
 
 ```text
-out/comprehensive-exam-system-windows-setup-v1.2.0.exe
-out/comprehensive-exam-system-windows-portable-v1.2.0.zip
-out/comprehensive-exam-system-android-v1.2.0.apk
+out/comprehensive-exam-system-windows-setup-v1.2.1.exe
+out/comprehensive-exam-system-windows-portable-v1.2.1.zip
+out/comprehensive-exam-system-android-v1.2.1.apk
 ```
 
 Flutter 编译后的 Windows 程序目录如下，这是中间产物目录，不是最终发布目录：
@@ -160,24 +160,24 @@ git diff --cached --stat
 
 ```powershell
 git push origin main
-git tag -a v1.2.0 -m "v1.2.0"
-git push origin v1.2.0
+git tag -a v1.2.1 -m "v1.2.1"
+git push origin v1.2.1
 ```
 
 再上传安装包：
 
 ```powershell
-gh release create v1.2.0 `
-  out\comprehensive-exam-system-windows-setup-v1.2.0.exe `
-  out\comprehensive-exam-system-windows-portable-v1.2.0.zip `
-  out\comprehensive-exam-system-android-v1.2.0.apk `
+gh release create v1.2.1 `
+  out\comprehensive-exam-system-windows-setup-v1.2.1.exe `
+  out\comprehensive-exam-system-windows-portable-v1.2.1.zip `
+  out\comprehensive-exam-system-android-v1.2.1.apk `
   --repo BitaMatt/comprehensive-exam-system `
-  --title "v1.2.0 Flutter 跨端版本" `
+  --title "v1.2.1 AI 设置与 out 打包优化" `
   --notes-file CHANGELOG.md
 ```
 
 如果 Release 已存在，可追加或替换文件：
 
 ```powershell
-gh release upload v1.2.0 out\<file-name> --repo BitaMatt/comprehensive-exam-system --clobber
+gh release upload v1.2.1 out\<file-name> --repo BitaMatt/comprehensive-exam-system --clobber
 ```

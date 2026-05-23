@@ -1,5 +1,15 @@
 # 更新日志
 
+## v1.2.1 - 2026-05-23
+
+- 统一将 Windows 安装包、Windows 便携包和 Android APK 输出到项目内的 `out/` 目录。
+- 新增应用内 AI 设置窗口：首次启动强制配置，之后可从顶部 AI 设置入口随时修改。
+- AI 设置支持 Base URL、API Key、模型名配置，默认兼容 ChatAnywhere 的 OpenAI 风格 `/v1` 接口。
+- 新增测试连接和获取模型列表功能，便于验证 API Key、Base URL 和模型配置是否可用。
+- 新增 VS Code 调试与打包配置，可通过运行面板快速启动 Windows、测试或打包。
+- 新增 `scripts/package_out.ps1`，用于一键生成 `out/` 内的 Windows/Android 发布包。
+- 更新 README 和开发者文档，补充 AI 设置、打包目录、调试测试与发布说明。
+
 ## v1.2.0 - 2026-05-22
 
 - 使用 Flutter 重构应用，支持 Windows 和 Android 双端运行。
