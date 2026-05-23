@@ -1,0 +1,47 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Flutter Windows 调试",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "windows",
+      "program": "lib/main.dart"
+    },
+    {
+      "name": "Flutter 当前设备调试",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart"
+    },
+    {
+      "name": "运行 Flutter 测试",
+      "request": "launch",
+      "type": "dart",
+      "program": "test/widget_test.dart"
+    },
+    {
+      "name": "打包 Windows 到 out 后启动",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "windows",
+      "program": "lib/main.dart",
+      "preLaunchTask": "package: windows out"
+    },
+    {
+      "name": "打包全部到 out 后启动 Windows",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "windows",
+      "program": "lib/main.dart",
+      "preLaunchTask": "package: all out"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "检查并调试 Windows",
+      "configurations": ["Flutter Windows 调试"],
+      "preLaunchTask": "flutter: analyze"
+    }
+  ]
+}

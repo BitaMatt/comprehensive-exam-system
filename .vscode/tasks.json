@@ -1,0 +1,72 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "flutter: pub get",
+      "type": "shell",
+      "command": "C:\\Users\\pc\\flutter\\bin\\flutter.bat",
+      "args": ["pub", "get"],
+      "problemMatcher": []
+    },
+    {
+      "label": "flutter: analyze",
+      "type": "shell",
+      "command": "C:\\Users\\pc\\flutter\\bin\\flutter.bat",
+      "args": ["analyze"],
+      "problemMatcher": []
+    },
+    {
+      "label": "flutter: test",
+      "type": "shell",
+      "command": "C:\\Users\\pc\\flutter\\bin\\flutter.bat",
+      "args": ["test"],
+      "problemMatcher": []
+    },
+    {
+      "label": "package: windows out",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\package_out.ps1",
+        "-Target",
+        "windows"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "package: android out",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\package_out.ps1",
+        "-Target",
+        "android"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "package: all out",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\package_out.ps1",
+        "-Target",
+        "all"
+      ],
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    }
+  ]
+}

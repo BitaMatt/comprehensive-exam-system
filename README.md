@@ -10,33 +10,19 @@
 - 即时反馈：提交答案后立即显示正确/错误、正确答案和题目解析。
 - 练习记录：自动保存练习时间、目标、答题数量、正确数和正确率。
 - 题库浏览：可查看内置题库、题目数量和题目预览。
-- 离线可用：题库随安装包内置，无需联网即可练习。
+- AI 设置：首次启动要求用户自行配置 API Key、Base URL 和模型，支持获取模型与测试连接。
+- 离线练习：题库随安装包内置，无需联网即可刷题；AI 相关功能需要用户自行配置接口。
 
 ## 当前版本
 
 当前版本：`v1.2.0`
 
-本版本已提供以下安装包：
+本版本安装包输出目录：
 
-- Windows 安装包：`release_artifacts/comprehensive-exam-system-windows-setup-v1.2.0.exe`
-- Windows 便携包：`release_artifacts/comprehensive-exam-system-windows-portable-v1.2.0.zip`
-- Android 安装包：`release_artifacts/comprehensive-exam-system-android-v1.2.0.apk`
+- Windows 安装包：`out/comprehensive-exam-system-windows-setup-v1.2.0.exe`
+- Windows 便携包：`out/comprehensive-exam-system-windows-portable-v1.2.0.zip`
+- Android 安装包：`out/comprehensive-exam-system-android-v1.2.0.apk`
 
 ## 开发与构建
 
-本项目使用 Flutter 3.44.0。
-
-```powershell
-C:\Users\pc\flutter\bin\flutter.bat pub get
-C:\Users\pc\flutter\bin\flutter.bat analyze
-C:\Users\pc\flutter\bin\flutter.bat test
-C:\Users\pc\flutter\bin\flutter.bat build windows --release
-$env:FLUTTER_STORAGE_BASE_URL='https://storage.flutter-io.cn'
-C:\Users\pc\flutter\bin\flutter.bat build apk --release
-```
-
-Windows 安装包使用 Inno Setup：
-
-```powershell
-& 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' setup_flutter.iss
-```
+开发、测试和打包说明见 [DEVELOPMENT.md](DEVELOPMENT.md)。

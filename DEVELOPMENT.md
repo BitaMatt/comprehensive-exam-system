@@ -4,13 +4,13 @@
 
 ## 环境要求
 
-- Flutter 3.44.0 或更新的 stable 版本
-- Android Studio 或 Android SDK，已安装 Android command-line tools
-- JDK 17 或更新版本
-- Windows 打包需要 Visual Studio 2022 Build Tools，包含 C++、CMake、Windows SDK
-- Windows 安装包需要 Inno Setup 6
+- Flutter 3.44.0 或更新的 stable 版本。
+- Android Studio 或 Android SDK，并安装 Android command-line tools。
+- JDK 17 或更新版本。
+- Windows 打包需要 Visual Studio 2022 Build Tools，包含 C++、CMake、Windows SDK。
+- Windows 安装包需要 Inno Setup 6。
 
-本机当前 Flutter 路径示例：
+本机 Flutter 路径示例：
 
 ```powershell
 C:\Users\pc\flutter\bin\flutter.bat --version
@@ -43,6 +43,14 @@ C:\Users\pc\flutter\bin\flutter.bat devices
 C:\Users\pc\flutter\bin\flutter.bat run -d <device-id>
 ```
 
+VS Code 快速入口：
+
+- 按 `Ctrl+Shift+D` 打开“运行和调试”。
+- 选择 `Flutter Windows 调试` 可直接启动桌面端。
+- 选择 `运行 Flutter 测试` 可运行测试。
+- 选择 `打包 Windows 到 out 后启动` 或 `打包全部到 out 后启动 Windows` 会先执行打包任务，再启动桌面端。
+- `Terminal > Run Task...` 中可直接运行 `flutter: analyze`、`flutter: test`、`package: windows out`、`package: android out`、`package: all out`。
+
 ## 检查与测试
 
 提交前至少运行：
@@ -52,55 +60,40 @@ C:\Users\pc\flutter\bin\flutter.bat analyze
 C:\Users\pc\flutter\bin\flutter.bat test
 ```
 
-`analyze` 用于静态检查，`test` 用于运行 widget/unit 测试。
-
 ## 打包
 
-所有最终分发文件都应放在项目内的 `release_artifacts/`。不要把安装包、SDK 压缩包或缓存文件生成到项目目录外；如果临时下载了工具安装包，安装完成后应删除。
+所有最终分发文件都应放在项目内的 `out/`。不要把安装包、SDK 压缩包或缓存文件生成到项目目录外；如果临时下载了工具安装包，安装完成后应删除。
 
-Windows release：
+一键打包到 `out/`：
 
 ```powershell
-C:\Users\pc\flutter\bin\flutter.bat build windows --release
+powershell -ExecutionPolicy Bypass -File scripts\package_out.ps1 -Target all
+```
+
+只打 Windows：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\package_out.ps1 -Target windows
+```
+
+只打 Android：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\package_out.ps1 -Target android
+```
+
+输出文件：
+
+```text
+out/comprehensive-exam-system-windows-setup-v1.2.0.exe
+out/comprehensive-exam-system-windows-portable-v1.2.0.zip
+out/comprehensive-exam-system-android-v1.2.0.apk
 ```
 
 Flutter 编译后的 Windows 程序目录如下，这是中间产物目录，不是最终发布目录：
 
 ```text
 build/windows/x64/runner/Release/
-```
-
-Windows 便携包：
-
-```powershell
-New-Item -ItemType Directory -Force -Path release_artifacts | Out-Null
-Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath release_artifacts\comprehensive-exam-system-windows-portable-v1.2.0.zip -Force
-```
-
-Windows 安装包：
-
-```powershell
-& 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' setup_flutter.iss
-```
-
-生成结果：
-
-```text
-release_artifacts/comprehensive-exam-system-windows-setup-v1.2.0.exe
-```
-
-Android APK：
-
-```powershell
-$env:FLUTTER_STORAGE_BASE_URL='https://storage.flutter-io.cn'
-C:\Users\pc\flutter\bin\flutter.bat build apk --release
-Copy-Item build\app\outputs\flutter-apk\app-release.apk release_artifacts\comprehensive-exam-system-android-v1.2.0.apk -Force
-```
-
-生成结果：
-
-```text
-release_artifacts/comprehensive-exam-system-android-v1.2.0.apk
 ```
 
 Android App Bundle：
@@ -121,6 +114,24 @@ Remove-Item C:\Users\pc\commandlinetools-win*.zip -Force -ErrorAction SilentlyCo
 
 不要删除 `C:\Users\pc\flutter\` 或 Android SDK 目录，它们是已安装的开发工具。
 
+## AI 设置
+
+软件首次打开会弹出 AI 设置窗口，用户需要自行填写 API Key、Base URL 和模型名。后续可点击右上角 `AI 设置` 按钮修改。
+
+默认 Base URL：
+
+```text
+https://api.chatanywhere.tech
+```
+
+AI 设置窗口支持：
+
+- 保存 API Key、Base URL、模型名。
+- 通过 `/v1/models` 获取模型列表。
+- 通过 `/v1/chat/completions` 测试连接。
+
+API Key 只保存到本机应用数据目录，不写入源码，也不要提交到 Git。
+
 ## Git 提交规范
 
 提交前检查：
@@ -134,6 +145,7 @@ git diff --cached --stat
 
 - `build/`
 - `.dart_tool/`
+- `out/`
 - `release_artifacts/`
 - APK、AAB、ZIP、EXE 等打包产物
 - `venv/`、`.venv/`
@@ -156,9 +168,9 @@ git push origin v1.2.0
 
 ```powershell
 gh release create v1.2.0 `
-  release_artifacts\comprehensive-exam-system-windows-setup-v1.2.0.exe `
-  release_artifacts\comprehensive-exam-system-windows-portable-v1.2.0.zip `
-  release_artifacts\comprehensive-exam-system-android-v1.2.0.apk `
+  out\comprehensive-exam-system-windows-setup-v1.2.0.exe `
+  out\comprehensive-exam-system-windows-portable-v1.2.0.zip `
+  out\comprehensive-exam-system-android-v1.2.0.apk `
   --repo BitaMatt/comprehensive-exam-system `
   --title "v1.2.0 Flutter 跨端版本" `
   --notes-file CHANGELOG.md
@@ -167,5 +179,5 @@ gh release create v1.2.0 `
 如果 Release 已存在，可追加或替换文件：
 
 ```powershell
-gh release upload v1.2.0 release_artifacts\<file-name> --repo BitaMatt/comprehensive-exam-system --clobber
+gh release upload v1.2.0 out\<file-name> --repo BitaMatt/comprehensive-exam-system --clobber
 ```
