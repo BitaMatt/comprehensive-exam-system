@@ -56,13 +56,15 @@ C:\Users\pc\flutter\bin\flutter.bat test
 
 ## 打包
 
+所有最终分发文件都应放在项目内的 `release_artifacts/`。不要把安装包、SDK 压缩包或缓存文件生成到项目目录外；如果临时下载了工具安装包，安装完成后应删除。
+
 Windows release：
 
 ```powershell
 C:\Users\pc\flutter\bin\flutter.bat build windows --release
 ```
 
-产物目录：
+Flutter 编译后的 Windows 程序目录如下，这是中间产物目录，不是最终发布目录：
 
 ```text
 build/windows/x64/runner/Release/
@@ -81,6 +83,12 @@ Windows 安装包：
 & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' setup_flutter.iss
 ```
 
+生成结果：
+
+```text
+release_artifacts/comprehensive-exam-system-windows-setup-v1.2.0.exe
+```
+
 Android APK：
 
 ```powershell
@@ -89,12 +97,29 @@ C:\Users\pc\flutter\bin\flutter.bat build apk --release
 Copy-Item build\app\outputs\flutter-apk\app-release.apk release_artifacts\comprehensive-exam-system-android-v1.2.0.apk -Force
 ```
 
+生成结果：
+
+```text
+release_artifacts/comprehensive-exam-system-android-v1.2.0.apk
+```
+
 Android App Bundle：
 
 ```powershell
 $env:FLUTTER_STORAGE_BASE_URL='https://storage.flutter-io.cn'
 C:\Users\pc\flutter\bin\flutter.bat build appbundle --release
 ```
+
+## 清理项目外临时安装包
+
+工具安装包不应长期保留在项目外。例如安装 Flutter SDK 和 Android command-line tools 后，可删除下载时留下的压缩包：
+
+```powershell
+Remove-Item C:\Users\pc\flutter_windows_*.zip -Force -ErrorAction SilentlyContinue
+Remove-Item C:\Users\pc\commandlinetools-win*.zip -Force -ErrorAction SilentlyContinue
+```
+
+不要删除 `C:\Users\pc\flutter\` 或 Android SDK 目录，它们是已安装的开发工具。
 
 ## Git 提交规范
 
