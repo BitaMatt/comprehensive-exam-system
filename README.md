@@ -1,28 +1,38 @@
 # 考试练习系统
 
-考试练习系统是一款面向 Windows 和 Android 的跨端刷题应用，用 Flutter 重构自原 Python/PyQt 桌面版本。软件内置多套保险考试题库，适合日常练习、考前冲刺和错题复盘。
+考试练习系统是一款面向 Windows 和 Android 的跨端刷题应用，使用 Flutter 构建。软件内置保险考试题库，也支持通过 PDF 和 AI 自动生成新的练习题库。
 
 ## 功能特色
 
-- 跨端使用：同一套 Flutter 代码同时支持 Windows 桌面端和 Android 手机端。
-- 单卷练习：可按 A/B/C 卷或卷四题库随机抽题。
-- 分组练习：可按考试分组汇总题库后随机练习。
-- 即时反馈：提交答案后立即显示正确/错误、正确答案和题目解析。
-- 练习记录：自动保存练习时间、目标、答题数量、正确数和正确率。
-- 题库浏览：可查看内置题库、题目数量和题目预览。
-- AI 设置：首次启动要求用户自行配置 API Key、Base URL 和模型，支持获取模型与测试连接。
-- 离线练习：题库随安装包内置，无需联网即可刷题；AI 相关功能需要用户自行配置接口。
+- 跨端使用：同一套 Flutter 应用支持 Windows 桌面端和 Android 手机端。
+- 单卷/分组练习：可按题库或考试分组随机抽题。
+- 即时反馈：提交答案后显示正确答案和解析。
+- 练习记录：保存练习时间、目标、题量、正确数和正确率。
+- AI 设置：用户自行配置 Base URL、API Key 和模型，支持获取模型与测试连接。
+- PDF 生成题库：选择 PDF 后自动抽取文本，扫描页可交给视觉/OCR 模型识别，并生成可直接练习的题库。
+- 可续跑生成：大 PDF 分片处理，支持暂停、失败后继续和生成进度显示。
+- 本地保存：生成题库存放在本机应用数据目录，不写入源码仓库，可导出 JSON 备份。
 
 ## 当前版本
 
-当前版本：`v1.2.1`
+当前版本：`v1.3.0`
 
-本版本安装包输出目录：
+安装包输出目录：
 
-- Windows 安装包：`out/comprehensive-exam-system-windows-setup-v1.2.1.exe`
-- Windows 便携包：`out/comprehensive-exam-system-windows-portable-v1.2.1.zip`
-- Android 安装包：`out/comprehensive-exam-system-android-v1.2.1.apk`
+- Windows 安装包：`out/comprehensive-exam-system-windows-setup-v1.3.0.exe`
+- Windows 便携包：`out/comprehensive-exam-system-windows-portable-v1.3.0.zip`
+- Android 安装包：`out/comprehensive-exam-system-android-v1.3.0.apk`
+
+## AI 与 OCR
+
+默认 Base URL 为：
+
+```text
+https://api.chatanywhere.tech
+```
+
+应用按 OpenAI-compatible `/v1/models` 和 `/v1/chat/completions` 接口调用。若模型不支持图片输入，扫描页会失败并给出提示；可选中文字 PDF 仍可通过文本抽取生成。
 
 ## 开发与构建
 
-开发、测试和打包说明见 [DEVELOPMENT.md](DEVELOPMENT.md)。
+开发、测试、打包和发布说明见 [DEVELOPMENT.md](DEVELOPMENT.md)。

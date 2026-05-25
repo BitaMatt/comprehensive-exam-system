@@ -1,6 +1,6 @@
 # 开发者说明
 
-本文档用于维护、调试、测试和打包 Flutter 版本的考试练习系统。
+本文档用于维护、调试、测试和打包 Flutter 版考试练习系统。
 
 ## 环境要求
 
@@ -9,6 +9,7 @@
 - JDK 17 或更新版本。
 - Windows 打包需要 Visual Studio 2022 Build Tools，包含 C++、CMake、Windows SDK。
 - Windows 安装包需要 Inno Setup 6。
+- Windows 使用插件打包时需要开启 Developer Mode，否则 Flutter 会因为无法创建符号链接而失败。
 
 本机 Flutter 路径示例：
 
@@ -16,42 +17,26 @@
 C:\Users\pc\flutter\bin\flutter.bat --version
 ```
 
-## 获取依赖
+## 调试与测试
+
+获取依赖：
 
 ```powershell
 C:\Users\pc\flutter\bin\flutter.bat pub get
 ```
 
-国内网络如果下载 Flutter Android engine 依赖较慢，可临时使用镜像：
-
-```powershell
-$env:FLUTTER_STORAGE_BASE_URL='https://storage.flutter-io.cn'
-```
-
-## 调试运行
-
-Windows 桌面端：
+Windows 调试：
 
 ```powershell
 C:\Users\pc\flutter\bin\flutter.bat run -d windows
 ```
 
-Android 设备或模拟器：
+Android 调试：
 
 ```powershell
 C:\Users\pc\flutter\bin\flutter.bat devices
 C:\Users\pc\flutter\bin\flutter.bat run -d <device-id>
 ```
-
-VS Code 快速入口：
-
-- 按 `Ctrl+Shift+D` 打开“运行和调试”。
-- 选择 `Flutter Windows 调试` 可直接启动桌面端。
-- 选择 `运行 Flutter 测试` 可运行测试。
-- 选择 `打包 Windows 到 out 后启动` 或 `打包全部到 out 后启动 Windows` 会先执行打包任务，再启动桌面端。
-- `Terminal > Run Task...` 中可直接运行 `flutter: analyze`、`flutter: test`、`package: windows out`、`package: android out`、`package: all out`。
-
-## 检查与测试
 
 提交前至少运行：
 
@@ -60,11 +45,45 @@ C:\Users\pc\flutter\bin\flutter.bat analyze
 C:\Users\pc\flutter\bin\flutter.bat test
 ```
 
+VS Code 快速入口：
+
+- `Ctrl+Shift+D` 打开运行和调试。
+- `Flutter Windows 调试` 启动桌面端。
+- `运行 Flutter 测试` 执行测试。
+- `打包 Windows 到 out 后启动` 或 `打包全部到 out 后启动 Windows` 会先执行打包任务。
+- `Terminal > Run Task...` 可运行 `flutter: analyze`、`flutter: test`、`package: windows out`、`package: android out`、`package: all out`。
+
+## 题库生成
+
+题库生成入口在应用底部导航的「生成」页。
+
+处理流程：
+
+1. 用户选择 PDF。
+2. 应用使用 `syncfusion_flutter_pdf` 抽取可选中文本。
+3. 文本密度过低的页面会使用 `pdfx` 渲染为图片。
+4. 应用把文本和必要的页面图片按 chunk 发送给用户配置的 AI 模型。
+5. AI 返回题库 JSON 后，应用校验单选 A-D 题并保存。
+
+生成数据位置：
+
+```text
+%APPDATA%\ComprehensiveExamSystem\generated_banks\
+%APPDATA%\ComprehensiveExamSystem\generation_jobs\
+```
+
+注意：
+
+- API Key 只保存到本机应用数据目录，不写入源码。
+- 生成题库默认自动加入题库列表，也可以导出 JSON。
+- 扫描件需要模型支持图片输入；若模型不支持，建议换用视觉模型或先使用外部 OCR 转成可选中文字 PDF。
+- `syncfusion_flutter_pdf` 受 Syncfusion license 约束，发布前请确认项目符合其授权要求。
+
 ## 打包
 
-所有最终分发文件都应放在项目内的 `out/`。不要把安装包、SDK 压缩包或缓存文件生成到项目目录外；如果临时下载了工具安装包，安装完成后应删除。
+所有最终分发文件都输出到项目内 `out/`。
 
-一键打包到 `out/`：
+一键打包：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\package_out.ps1 -Target all
@@ -85,15 +104,9 @@ powershell -ExecutionPolicy Bypass -File scripts\package_out.ps1 -Target android
 输出文件：
 
 ```text
-out/comprehensive-exam-system-windows-setup-v1.2.1.exe
-out/comprehensive-exam-system-windows-portable-v1.2.1.zip
-out/comprehensive-exam-system-android-v1.2.1.apk
-```
-
-Flutter 编译后的 Windows 程序目录如下，这是中间产物目录，不是最终发布目录：
-
-```text
-build/windows/x64/runner/Release/
+out/comprehensive-exam-system-windows-setup-v1.3.0.exe
+out/comprehensive-exam-system-windows-portable-v1.3.0.zip
+out/comprehensive-exam-system-android-v1.3.0.apk
 ```
 
 Android App Bundle：
@@ -102,35 +115,6 @@ Android App Bundle：
 $env:FLUTTER_STORAGE_BASE_URL='https://storage.flutter-io.cn'
 C:\Users\pc\flutter\bin\flutter.bat build appbundle --release
 ```
-
-## 清理项目外临时安装包
-
-工具安装包不应长期保留在项目外。例如安装 Flutter SDK 和 Android command-line tools 后，可删除下载时留下的压缩包：
-
-```powershell
-Remove-Item C:\Users\pc\flutter_windows_*.zip -Force -ErrorAction SilentlyContinue
-Remove-Item C:\Users\pc\commandlinetools-win*.zip -Force -ErrorAction SilentlyContinue
-```
-
-不要删除 `C:\Users\pc\flutter\` 或 Android SDK 目录，它们是已安装的开发工具。
-
-## AI 设置
-
-软件首次打开会弹出 AI 设置窗口，用户需要自行填写 API Key、Base URL 和模型名。后续可点击右上角 `AI 设置` 按钮修改。
-
-默认 Base URL：
-
-```text
-https://api.chatanywhere.tech
-```
-
-AI 设置窗口支持：
-
-- 保存 API Key、Base URL、模型名。
-- 通过 `/v1/models` 获取模型列表。
-- 通过 `/v1/chat/completions` 测试连接。
-
-API Key 只保存到本机应用数据目录，不写入源码，也不要提交到 Git。
 
 ## Git 提交规范
 
@@ -151,33 +135,26 @@ git diff --cached --stat
 - `venv/`、`.venv/`
 - `.env`、`config.py`
 - `*.jks`、`*.keystore`、`key.properties` 等签名或密钥文件
-
-题库 JSON 已复制到 `assets/question_banks/` 并被 Git 跟踪。新增题库时如果确实需要提交，请确认不包含个人信息或密钥。
+- 用户 PDF、OCR 临时图片、生成任务缓存
 
 ## 发布到 GitHub Releases
 
-先推送代码和标签：
-
 ```powershell
 git push origin main
-git tag -a v1.2.1 -m "v1.2.1"
-git push origin v1.2.1
-```
+git tag -a v1.3.0 -m "v1.3.0"
+git push origin v1.3.0
 
-再上传安装包：
-
-```powershell
-gh release create v1.2.1 `
-  out\comprehensive-exam-system-windows-setup-v1.2.1.exe `
-  out\comprehensive-exam-system-windows-portable-v1.2.1.zip `
-  out\comprehensive-exam-system-android-v1.2.1.apk `
+gh release create v1.3.0 `
+  out\comprehensive-exam-system-windows-setup-v1.3.0.exe `
+  out\comprehensive-exam-system-windows-portable-v1.3.0.zip `
+  out\comprehensive-exam-system-android-v1.3.0.apk `
   --repo BitaMatt/comprehensive-exam-system `
-  --title "v1.2.1 AI 设置与 out 打包优化" `
+  --title "v1.3.0 题库生成" `
   --notes-file CHANGELOG.md
 ```
 
-如果 Release 已存在，可追加或替换文件：
+如果 Release 已存在：
 
 ```powershell
-gh release upload v1.2.1 out\<file-name> --repo BitaMatt/comprehensive-exam-system --clobber
+gh release upload v1.3.0 out\<file-name> --repo BitaMatt/comprehensive-exam-system --clobber
 ```

@@ -1,13 +1,21 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:path_provider/path_provider.dart';
+import 'package:pdfx/pdfx.dart' as pdfx;
+import 'package:share_plus/share_plus.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart' as sfpdf;
 
-const appVersion = 'v1.2.0';
+const appVersion = 'v1.3.0';
 const recordStorageKey = 'exam_records_v1';
 const aiSettingsFileName = 'ai_settings.json';
+const generatedBankDirectoryName = 'generated_banks';
+const generationJobDirectoryName = 'generation_jobs';
 const defaultAiBaseUrl = 'https://api.chatanywhere.tech';
 const defaultAiModel = 'gpt-4o-mini';
 const bankAssets = [
@@ -73,6 +81,13 @@ class QuestionBank {
   final String examGroup;
   final List<Question> questions;
 
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'exam_group': examGroup,
+    'count': questions.length,
+    'questions': questions.map((question) => question.toJson()).toList(),
+  };
+
   factory QuestionBank.fromJson(Map<String, dynamic> json) {
     final questions = (json['questions'] as List<dynamic>? ?? [])
         .map((item) => Question.fromJson(item as Map<String, dynamic>))
@@ -110,6 +125,16 @@ class Question {
       text.trim().isNotEmpty &&
       ['A', 'B', 'C', 'D'].contains(answer) &&
       options.keys.toSet().containsAll(['A', 'B', 'C', 'D']);
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'question': text,
+    'options': options,
+    'answer': answer,
+    'analysis': analysis,
+    'source_bank': sourceBank,
+    'exam_group': examGroup,
+  };
 
   factory Question.fromJson(Map<String, dynamic> json) {
     final rawOptions = json['options'] as Map<String, dynamic>? ?? {};
@@ -158,6 +183,218 @@ class ExamRecord {
       correct: (json['correct'] as num? ?? 0).toInt(),
     );
   }
+}
+
+class GeneratedBankMetadata {
+  const GeneratedBankMetadata({
+    required this.id,
+    required this.name,
+    required this.examGroup,
+    required this.questionCount,
+    required this.sourcePdfName,
+    required this.createdAt,
+    required this.status,
+  });
+
+  final String id;
+  final String name;
+  final String examGroup;
+  final int questionCount;
+  final String sourcePdfName;
+  final String createdAt;
+  final String status;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'exam_group': examGroup,
+    'question_count': questionCount,
+    'source_pdf_name': sourcePdfName,
+    'created_at': createdAt,
+    'status': status,
+  };
+
+  factory GeneratedBankMetadata.fromJson(Map<String, dynamic> json) {
+    return GeneratedBankMetadata(
+      id: (json['id'] ?? '').toString(),
+      name: (json['name'] ?? '').toString(),
+      examGroup: (json['exam_group'] ?? '').toString(),
+      questionCount: (json['question_count'] as num? ?? 0).toInt(),
+      sourcePdfName: (json['source_pdf_name'] ?? '').toString(),
+      createdAt: (json['created_at'] ?? '').toString(),
+      status: (json['status'] ?? '').toString(),
+    );
+  }
+}
+
+class GenerationJob {
+  const GenerationJob({
+    required this.id,
+    required this.pdfPath,
+    required this.pdfName,
+    required this.bankName,
+    required this.examGroup,
+    required this.questionPrefix,
+    required this.startPage,
+    required this.endPage,
+    required this.totalPages,
+    required this.nextChunkIndex,
+    required this.completedQuestions,
+    required this.errors,
+    required this.completed,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  final String id;
+  final String pdfPath;
+  final String pdfName;
+  final String bankName;
+  final String examGroup;
+  final String questionPrefix;
+  final int startPage;
+  final int endPage;
+  final int totalPages;
+  final int nextChunkIndex;
+  final List<Question> completedQuestions;
+  final List<String> errors;
+  final bool completed;
+  final String createdAt;
+  final String updatedAt;
+
+  GenerationJob copyWith({
+    int? totalPages,
+    int? nextChunkIndex,
+    List<Question>? completedQuestions,
+    List<String>? errors,
+    bool? completed,
+    String? updatedAt,
+  }) {
+    return GenerationJob(
+      id: id,
+      pdfPath: pdfPath,
+      pdfName: pdfName,
+      bankName: bankName,
+      examGroup: examGroup,
+      questionPrefix: questionPrefix,
+      startPage: startPage,
+      endPage: endPage,
+      totalPages: totalPages ?? this.totalPages,
+      nextChunkIndex: nextChunkIndex ?? this.nextChunkIndex,
+      completedQuestions: completedQuestions ?? this.completedQuestions,
+      errors: errors ?? this.errors,
+      completed: completed ?? this.completed,
+      createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'pdf_path': pdfPath,
+    'pdf_name': pdfName,
+    'bank_name': bankName,
+    'exam_group': examGroup,
+    'question_prefix': questionPrefix,
+    'start_page': startPage,
+    'end_page': endPage,
+    'total_pages': totalPages,
+    'next_chunk_index': nextChunkIndex,
+    'completed_questions': completedQuestions
+        .map((question) => question.toJson())
+        .toList(),
+    'errors': errors,
+    'completed': completed,
+    'created_at': createdAt,
+    'updated_at': updatedAt,
+  };
+
+  factory GenerationJob.fromJson(Map<String, dynamic> json) {
+    final questions = (json['completed_questions'] as List<dynamic>? ?? [])
+        .map((item) => Question.fromJson(item as Map<String, dynamic>))
+        .where((question) => question.isValid)
+        .toList();
+    return GenerationJob(
+      id: (json['id'] ?? '').toString(),
+      pdfPath: (json['pdf_path'] ?? '').toString(),
+      pdfName: (json['pdf_name'] ?? '').toString(),
+      bankName: (json['bank_name'] ?? '').toString(),
+      examGroup: (json['exam_group'] ?? '').toString(),
+      questionPrefix: (json['question_prefix'] ?? 'Q').toString(),
+      startPage: (json['start_page'] as num? ?? 1).toInt(),
+      endPage: (json['end_page'] as num? ?? 1).toInt(),
+      totalPages: (json['total_pages'] as num? ?? 0).toInt(),
+      nextChunkIndex: (json['next_chunk_index'] as num? ?? 0).toInt(),
+      completedQuestions: questions,
+      errors: (json['errors'] as List<dynamic>? ?? [])
+          .map((item) => item.toString())
+          .toList(),
+      completed: json['completed'] == true,
+      createdAt: (json['created_at'] ?? '').toString(),
+      updatedAt: (json['updated_at'] ?? '').toString(),
+    );
+  }
+}
+
+class GenerationProgress {
+  const GenerationProgress({
+    required this.stage,
+    required this.currentPage,
+    required this.totalPages,
+    required this.currentChunk,
+    required this.totalChunks,
+    required this.successCount,
+    this.message = '',
+    this.warning = '',
+  });
+
+  final String stage;
+  final int currentPage;
+  final int totalPages;
+  final int currentChunk;
+  final int totalChunks;
+  final int successCount;
+  final String message;
+  final String warning;
+
+  double? get value {
+    if (totalChunks <= 0) return null;
+    return currentChunk.clamp(0, totalChunks) / totalChunks;
+  }
+}
+
+class PdfPageContent {
+  const PdfPageContent({
+    required this.pageNumber,
+    required this.text,
+    required this.needsOcr,
+    this.imageBytes,
+  });
+
+  final int pageNumber;
+  final String text;
+  final bool needsOcr;
+  final Uint8List? imageBytes;
+}
+
+class PdfInspection {
+  const PdfInspection({
+    required this.path,
+    required this.name,
+    required this.sizeBytes,
+    required this.totalPages,
+    required this.previewText,
+    required this.languageHint,
+    required this.scannedLike,
+  });
+
+  final String path;
+  final String name;
+  final int sizeBytes;
+  final int totalPages;
+  final String previewText;
+  final String languageHint;
+  final bool scannedLike;
 }
 
 class AiSettings {
@@ -242,6 +479,47 @@ class AiService {
     );
   }
 
+  Future<String> chatCompletion({
+    required AiSettings settings,
+    required List<Map<String, dynamic>> messages,
+    int maxTokens = 4000,
+  }) async {
+    final response = await _request(
+      settings: settings,
+      method: 'POST',
+      path: '/v1/chat/completions',
+      body: {
+        'model': settings.model.trim(),
+        'messages': messages,
+        'temperature': 0.1,
+        'max_tokens': maxTokens,
+      },
+    );
+    final body = jsonDecode(response) as Map<String, dynamic>;
+    final choices = body['choices'];
+    if (choices is! List || choices.isEmpty) {
+      throw const AiRequestException('AI 未返回可用内容');
+    }
+    final message = choices.first is Map<String, dynamic>
+        ? (choices.first as Map<String, dynamic>)['message']
+        : null;
+    if (message is! Map<String, dynamic>) {
+      throw const AiRequestException('AI 返回格式不完整');
+    }
+    final content = message['content'];
+    if (content is String) return content;
+    if (content is List) {
+      return content
+          .map((item) {
+            if (item is Map<String, dynamic>) return item['text']?.toString();
+            return item?.toString();
+          })
+          .whereType<String>()
+          .join('\n');
+    }
+    throw const AiRequestException('AI 返回内容为空');
+  }
+
   Future<String> _request({
     required AiSettings settings,
     required String method,
@@ -307,6 +585,521 @@ class AiRequestException implements Exception {
   String toString() => message;
 }
 
+class PdfExtractionService {
+  const PdfExtractionService();
+
+  Future<PdfInspection> inspect(String path) async {
+    final file = File(path);
+    final bytes = await file.readAsBytes();
+    final document = sfpdf.PdfDocument(inputBytes: bytes);
+    try {
+      final extractor = sfpdf.PdfTextExtractor(document);
+      final totalPages = document.pages.count;
+      final previewPages = min(totalPages, 3);
+      final preview = <String>[];
+      for (var index = 0; index < previewPages; index += 1) {
+        preview.add(
+          extractor.extractText(startPageIndex: index, endPageIndex: index),
+        );
+      }
+      final previewText = preview.join('\n').trim();
+      return PdfInspection(
+        path: path,
+        name: file.uri.pathSegments.isEmpty
+            ? 'document.pdf'
+            : Uri.decodeComponent(file.uri.pathSegments.last),
+        sizeBytes: await file.length(),
+        totalPages: totalPages,
+        previewText: previewText,
+        languageHint: _detectLanguage(previewText),
+        scannedLike: previewText.replaceAll(RegExp(r'\s+'), '').length < 120,
+      );
+    } finally {
+      document.dispose();
+    }
+  }
+
+  Future<List<PdfPageContent>> extractPages({
+    required String path,
+    required int startPage,
+    required int endPage,
+    required void Function(int page, int total) onPage,
+    required bool Function() shouldCancel,
+  }) async {
+    final bytes = await File(path).readAsBytes();
+    final document = sfpdf.PdfDocument(inputBytes: bytes);
+    pdfx.PdfDocument? renderDocument;
+    try {
+      final extractor = sfpdf.PdfTextExtractor(document);
+      final totalPages = document.pages.count;
+      final normalizedStart = startPage.clamp(1, totalPages);
+      final normalizedEnd = endPage.clamp(normalizedStart, totalPages);
+      final pages = <PdfPageContent>[];
+      for (var page = normalizedStart; page <= normalizedEnd; page += 1) {
+        if (shouldCancel()) break;
+        onPage(page, totalPages);
+        final text = extractor
+            .extractText(startPageIndex: page - 1, endPageIndex: page - 1)
+            .trim();
+        final needsOcr = text.replaceAll(RegExp(r'\s+'), '').length < 80;
+        Uint8List? imageBytes;
+        if (needsOcr) {
+          renderDocument ??= await pdfx.PdfDocument.openFile(path);
+          imageBytes = await _renderPage(renderDocument, page);
+        }
+        pages.add(
+          PdfPageContent(
+            pageNumber: page,
+            text: text,
+            needsOcr: needsOcr,
+            imageBytes: imageBytes,
+          ),
+        );
+      }
+      return pages;
+    } finally {
+      document.dispose();
+      await renderDocument?.close();
+    }
+  }
+
+  Future<Uint8List?> _renderPage(
+    pdfx.PdfDocument document,
+    int pageNumber,
+  ) async {
+    final page = await document.getPage(pageNumber);
+    try {
+      final image = await page.render(
+        width: page.width * 2,
+        height: page.height * 2,
+        format: pdfx.PdfPageImageFormat.jpeg,
+        quality: 78,
+      );
+      return image?.bytes;
+    } finally {
+      await page.close();
+    }
+  }
+
+  String _detectLanguage(String text) {
+    final chinese = RegExp(r'[\u4e00-\u9fff]').allMatches(text).length;
+    final latin = RegExp(r'[A-Za-z]').allMatches(text).length;
+    if (chinese > latin) return '中文';
+    if (latin > 0) return '英文/拉丁文字';
+    return '未知';
+  }
+}
+
+class QuestionChunk {
+  const QuestionChunk({required this.index, required this.pages});
+
+  final int index;
+  final List<PdfPageContent> pages;
+}
+
+class QuestionGenerationService {
+  const QuestionGenerationService({
+    required this.aiService,
+    required this.pdfService,
+    required this.store,
+  });
+
+  final AiService aiService;
+  final PdfExtractionService pdfService;
+  final GeneratedBankStore store;
+
+  Future<QuestionBank> generate({
+    required GenerationJob initialJob,
+    required AiSettings settings,
+    required void Function(GenerationProgress progress) onProgress,
+    required bool Function() shouldCancel,
+  }) async {
+    var job = initialJob;
+    onProgress(
+      GenerationProgress(
+        stage: '读取 PDF',
+        currentPage: job.startPage,
+        totalPages: job.totalPages,
+        currentChunk: job.nextChunkIndex,
+        totalChunks: 0,
+        successCount: job.completedQuestions.length,
+        message: '正在抽取 PDF 文本并识别扫描页',
+      ),
+    );
+
+    final pages = await pdfService.extractPages(
+      path: job.pdfPath,
+      startPage: job.startPage,
+      endPage: job.endPage,
+      shouldCancel: shouldCancel,
+      onPage: (page, total) {
+        onProgress(
+          GenerationProgress(
+            stage: '抽取文本/OCR准备',
+            currentPage: page,
+            totalPages: total,
+            currentChunk: job.nextChunkIndex,
+            totalChunks: 0,
+            successCount: job.completedQuestions.length,
+          ),
+        );
+      },
+    );
+    if (shouldCancel()) {
+      await store.saveJob(
+        job.copyWith(updatedAt: DateTime.now().toIso8601String()),
+      );
+      throw const GenerationCancelledException();
+    }
+
+    final chunks = _buildChunks(pages);
+    final questions = [...job.completedQuestions];
+    final errors = [...job.errors];
+
+    for (
+      var chunkIndex = job.nextChunkIndex;
+      chunkIndex < chunks.length;
+      chunkIndex += 1
+    ) {
+      if (shouldCancel()) break;
+      final chunk = chunks[chunkIndex];
+      onProgress(
+        GenerationProgress(
+          stage: chunk.pages.any((page) => page.needsOcr)
+              ? 'OCR/视觉识别'
+              : 'AI 解析',
+          currentPage: chunk.pages.last.pageNumber,
+          totalPages: job.totalPages,
+          currentChunk: chunkIndex,
+          totalChunks: chunks.length,
+          successCount: questions.length,
+          message: '正在处理第 ${chunkIndex + 1} / ${chunks.length} 个片段',
+        ),
+      );
+
+      try {
+        final parsed = await _parseChunk(
+          settings: settings,
+          chunk: chunk,
+          bankName: job.bankName,
+          examGroup: job.examGroup,
+          prefix: job.questionPrefix,
+          existingCount: questions.length,
+        );
+        questions.addAll(_dedupe(questions, parsed));
+      } catch (error) {
+        errors.add(
+          '第 ${chunk.pages.first.pageNumber}-${chunk.pages.last.pageNumber} 页：$error',
+        );
+      }
+
+      job = job.copyWith(
+        nextChunkIndex: chunkIndex + 1,
+        completedQuestions: questions,
+        errors: errors,
+        updatedAt: DateTime.now().toIso8601String(),
+      );
+      await store.saveJob(job);
+    }
+
+    if (shouldCancel()) {
+      await store.saveJob(
+        job.copyWith(updatedAt: DateTime.now().toIso8601String()),
+      );
+      throw const GenerationCancelledException();
+    }
+
+    final bank = QuestionBank(
+      name: job.bankName,
+      examGroup: job.examGroup,
+      questions: questions,
+    );
+    await store.saveGeneratedBank(
+      bank: bank,
+      metadata: GeneratedBankMetadata(
+        id: job.id,
+        name: job.bankName,
+        examGroup: job.examGroup,
+        questionCount: questions.length,
+        sourcePdfName: job.pdfName,
+        createdAt: job.createdAt,
+        status: errors.isEmpty ? 'completed' : 'completed_with_warnings',
+      ),
+    );
+    await store.saveJob(
+      job.copyWith(
+        completed: true,
+        completedQuestions: questions,
+        errors: errors,
+        updatedAt: DateTime.now().toIso8601String(),
+      ),
+    );
+    onProgress(
+      GenerationProgress(
+        stage: '保存完成',
+        currentPage: job.endPage,
+        totalPages: job.totalPages,
+        currentChunk: chunks.length,
+        totalChunks: chunks.length,
+        successCount: questions.length,
+        warning: errors.join('\n'),
+      ),
+    );
+    return bank;
+  }
+
+  List<QuestionChunk> _buildChunks(List<PdfPageContent> pages) {
+    final chunks = <QuestionChunk>[];
+    var current = <PdfPageContent>[];
+    var currentChars = 0;
+    for (final page in pages) {
+      final pageChars = page.text.length;
+      final forceSingle = page.needsOcr;
+      if (current.isNotEmpty &&
+          (forceSingle ||
+              current.length >= 3 ||
+              currentChars + pageChars > 7000)) {
+        chunks.add(QuestionChunk(index: chunks.length, pages: current));
+        current = [];
+        currentChars = 0;
+      }
+      current.add(page);
+      currentChars += pageChars;
+      if (forceSingle) {
+        chunks.add(QuestionChunk(index: chunks.length, pages: current));
+        current = [];
+        currentChars = 0;
+      }
+    }
+    if (current.isNotEmpty) {
+      chunks.add(QuestionChunk(index: chunks.length, pages: current));
+    }
+    return chunks;
+  }
+
+  Future<List<Question>> _parseChunk({
+    required AiSettings settings,
+    required QuestionChunk chunk,
+    required String bankName,
+    required String examGroup,
+    required String prefix,
+    required int existingCount,
+  }) async {
+    Object? lastError;
+    for (var attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        final content = await aiService.chatCompletion(
+          settings: settings,
+          messages: [
+            {
+              'role': 'system',
+              'content':
+                  '你是考试题库整理助手。只输出严格 JSON，不要解释。只提取单选 A/B/C/D 题。无法确定答案的题不要输出。',
+            },
+            {
+              'role': 'user',
+              'content': _buildChunkContent(
+                chunk: chunk,
+                bankName: bankName,
+                examGroup: examGroup,
+                prefix: prefix,
+                existingCount: existingCount,
+                previousError: attempt == 0 ? '' : '上次错误：$lastError',
+              ),
+            },
+          ],
+        );
+        final json = _decodeJsonObject(content);
+        final rawQuestions = json['questions'];
+        if (rawQuestions is! List) {
+          throw const FormatException('缺少 questions 数组');
+        }
+        final questions = rawQuestions
+            .map(
+              (item) =>
+                  item is Map<String, dynamic> ? Question.fromJson(item) : null,
+            )
+            .whereType<Question>()
+            .where((question) => question.isValid)
+            .map(
+              (question) => _normalizeQuestion(question, bankName, examGroup),
+            )
+            .toList();
+        if (questions.isEmpty) {
+          throw const FormatException('没有解析出有效单选题');
+        }
+        return questions;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw AiRequestException('AI 解析失败：$lastError');
+  }
+
+  Object _buildChunkContent({
+    required QuestionChunk chunk,
+    required String bankName,
+    required String examGroup,
+    required String prefix,
+    required int existingCount,
+    required String previousError,
+  }) {
+    final prompt =
+        '''
+$previousError
+请从以下 PDF 内容中提取单选题，输出 JSON：
+{
+  "name": "$bankName",
+  "exam_group": "$examGroup",
+  "questions": [
+    {
+      "id": "$prefix-001",
+      "question": "题干",
+      "options": {"A": "选项A", "B": "选项B", "C": "选项C", "D": "选项D"},
+      "answer": "A",
+      "analysis": "简短解析，没有则留空",
+      "source_bank": "$bankName",
+      "exam_group": "$examGroup"
+    }
+  ]
+}
+题号从 ${existingCount + 1} 继续。保留原文语言，不要编造题目或答案。
+
+PDF 页文本：
+${chunk.pages.map((page) => '--- 第 ${page.pageNumber} 页 ---\n${page.text}').join('\n\n')}
+''';
+    final imagePages = chunk.pages
+        .where((page) => page.imageBytes != null)
+        .toList();
+    if (imagePages.isEmpty) return prompt;
+    return [
+      {'type': 'text', 'text': prompt},
+      for (final page in imagePages)
+        {
+          'type': 'image_url',
+          'image_url': {
+            'url': 'data:image/jpeg;base64,${base64Encode(page.imageBytes!)}',
+          },
+        },
+    ];
+  }
+
+  Map<String, dynamic> _decodeJsonObject(String content) {
+    var text = content.trim();
+    final fence = RegExp(r'```(?:json)?\s*([\s\S]*?)```').firstMatch(text);
+    if (fence != null) text = fence.group(1)!.trim();
+    final start = text.indexOf('{');
+    final end = text.lastIndexOf('}');
+    if (start >= 0 && end > start) text = text.substring(start, end + 1);
+    final decoded = jsonDecode(text);
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('AI 返回不是 JSON 对象');
+    }
+    return decoded;
+  }
+
+  Question _normalizeQuestion(
+    Question question,
+    String bankName,
+    String examGroup,
+  ) {
+    return Question(
+      id: question.id,
+      text: question.text,
+      options: question.options,
+      answer: question.answer,
+      analysis: question.analysis,
+      sourceBank: question.sourceBank.trim().isEmpty
+          ? bankName
+          : question.sourceBank,
+      examGroup: question.examGroup.trim().isEmpty
+          ? examGroup
+          : question.examGroup,
+    );
+  }
+
+  List<Question> _dedupe(List<Question> existing, List<Question> incoming) {
+    final seen = existing.map((question) => question.text.trim()).toSet();
+    final result = <Question>[];
+    for (final question in incoming) {
+      final key = question.text.trim();
+      if (seen.add(key)) result.add(question);
+    }
+    return result;
+  }
+}
+
+class GeneratedBankStore {
+  const GeneratedBankStore();
+
+  Future<List<QuestionBank>> loadGeneratedBanks() async {
+    final dir = await _generatedBanksDirectory();
+    if (!await dir.exists()) return [];
+    final banks = <QuestionBank>[];
+    await for (final entity in dir.list()) {
+      if (entity is! File || !entity.path.endsWith('.json')) continue;
+      try {
+        final content = await entity.readAsString();
+        banks.add(
+          QuestionBank.fromJson(jsonDecode(content) as Map<String, dynamic>),
+        );
+      } catch (_) {
+        // Skip broken user-generated banks so the app can still start.
+      }
+    }
+    return banks;
+  }
+
+  Future<void> saveGeneratedBank({
+    required QuestionBank bank,
+    required GeneratedBankMetadata metadata,
+  }) async {
+    final dir = await _generatedBanksDirectory();
+    await dir.create(recursive: true);
+    final bankJson = bank.toJson();
+    bankJson['metadata'] = metadata.toJson();
+    await File(
+      '${dir.path}/${metadata.id}.json',
+    ).writeAsString(const JsonEncoder.withIndent('  ').convert(bankJson));
+  }
+
+  Future<void> saveJob(GenerationJob job) async {
+    final dir = await _generationJobsDirectory();
+    await dir.create(recursive: true);
+    await File(
+      '${dir.path}/${job.id}.json',
+    ).writeAsString(const JsonEncoder.withIndent('  ').convert(job.toJson()));
+  }
+
+  Future<GenerationJob?> loadLatestIncompleteJob() async {
+    final dir = await _generationJobsDirectory();
+    if (!await dir.exists()) return null;
+    final jobs = <GenerationJob>[];
+    await for (final entity in dir.list()) {
+      if (entity is! File || !entity.path.endsWith('.json')) continue;
+      try {
+        final content = await entity.readAsString();
+        final job = GenerationJob.fromJson(
+          jsonDecode(content) as Map<String, dynamic>,
+        );
+        if (!job.completed && await File(job.pdfPath).exists()) jobs.add(job);
+      } catch (_) {
+        // Ignore invalid job state files.
+      }
+    }
+    if (jobs.isEmpty) return null;
+    jobs.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return jobs.first;
+  }
+}
+
+class GenerationCancelledException implements Exception {
+  const GenerationCancelledException();
+
+  @override
+  String toString() => '已取消生成';
+}
+
 class ExamHomePage extends StatefulWidget {
   const ExamHomePage({super.key});
 
@@ -318,6 +1111,7 @@ class _ExamHomePageState extends State<ExamHomePage> {
   final _random = Random();
   final _answerController = TextEditingController();
   final _aiService = const AiService();
+  final _generatedBankStore = const GeneratedBankStore();
 
   var _loading = true;
   var _tabIndex = 0;
@@ -357,10 +1151,11 @@ class _ExamHomePageState extends State<ExamHomePage> {
 
     final records = await _loadRecords();
     final aiSettings = await _loadAiSettings();
+    final generatedBanks = await _generatedBankStore.loadGeneratedBanks();
 
     if (!mounted) return;
     setState(() {
-      _banks = banks;
+      _banks = [...banks, ...generatedBanks];
       _records = records.reversed.toList();
       _aiSettings = aiSettings;
       _selectedTarget = _targets.firstOrNull;
@@ -477,7 +1272,7 @@ class _ExamHomePageState extends State<ExamHomePage> {
     });
   }
 
-  Future<void> _openAiSettings({bool required = false}) async {
+  Future<AiSettings?> _openAiSettings({bool required = false}) async {
     final result = await showDialog<AiSettings>(
       context: context,
       barrierDismissible: !required,
@@ -487,11 +1282,12 @@ class _ExamHomePageState extends State<ExamHomePage> {
         forceSetup: required,
       ),
     );
-    if (result == null) return;
+    if (result == null) return null;
     await _saveAiSettings(result);
-    if (!mounted) return;
+    if (!mounted) return result;
     setState(() => _aiSettings = result);
     _showMessage('AI 设置已保存');
+    return result;
   }
 
   void _resetExam() {
@@ -512,7 +1308,23 @@ class _ExamHomePageState extends State<ExamHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final pages = [_buildPracticePage(), _buildBankPage(), _buildRecordPage()];
+    final pages = [
+      _buildPracticePage(),
+      _buildBankPage(),
+      QuestionGeneratorPage(
+        aiSettings: _aiSettings,
+        onRequireAiSettings: () async =>
+            await _openAiSettings(required: true) ?? _aiSettings,
+        onBankGenerated: (bank) {
+          setState(() {
+            _banks = [..._banks, bank];
+            _selectedTarget ??= bank.name;
+          });
+          _showMessage('题库已生成并加入列表');
+        },
+      ),
+      _buildRecordPage(),
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -545,6 +1357,10 @@ class _ExamHomePageState extends State<ExamHomePage> {
           NavigationDestination(
             icon: Icon(Icons.library_books_outlined),
             label: '题库',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.auto_fix_high_outlined),
+            label: '生成',
           ),
           NavigationDestination(
             icon: Icon(Icons.history_outlined),
@@ -853,6 +1669,385 @@ class _ExamHomePageState extends State<ExamHomePage> {
   }
 }
 
+class QuestionGeneratorPage extends StatefulWidget {
+  const QuestionGeneratorPage({
+    super.key,
+    required this.aiSettings,
+    required this.onRequireAiSettings,
+    required this.onBankGenerated,
+  });
+
+  final AiSettings aiSettings;
+  final Future<AiSettings> Function() onRequireAiSettings;
+  final void Function(QuestionBank bank) onBankGenerated;
+
+  @override
+  State<QuestionGeneratorPage> createState() => _QuestionGeneratorPageState();
+}
+
+class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
+  final _pdfService = const PdfExtractionService();
+  final _store = const GeneratedBankStore();
+  final _bankNameController = TextEditingController();
+  final _groupController = TextEditingController(text: '生成题库');
+  final _prefixController = TextEditingController(text: 'Q');
+  final _startPageController = TextEditingController(text: '1');
+  final _endPageController = TextEditingController(text: '1');
+  PdfInspection? _inspection;
+  GenerationProgress? _progress;
+  GenerationJob? _latestJob;
+  QuestionBank? _lastBank;
+  var _busy = false;
+  var _cancelRequested = false;
+  var _status = '';
+
+  QuestionGenerationService get _generationService => QuestionGenerationService(
+    aiService: const AiService(),
+    pdfService: _pdfService,
+    store: _store,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLatestJob();
+  }
+
+  @override
+  void dispose() {
+    _bankNameController.dispose();
+    _groupController.dispose();
+    _prefixController.dispose();
+    _startPageController.dispose();
+    _endPageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadLatestJob() async {
+    final job = await _store.loadLatestIncompleteJob();
+    if (!mounted) return;
+    setState(() => _latestJob = job);
+  }
+
+  Future<void> _pickPdf() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+      withData: false,
+    );
+    final path = result?.files.single.path;
+    if (path == null) return;
+    setState(() {
+      _busy = true;
+      _status = '正在读取 PDF 信息...';
+      _progress = null;
+      _lastBank = null;
+    });
+    try {
+      final inspection = await _pdfService.inspect(path);
+      if (!mounted) return;
+      setState(() {
+        _inspection = inspection;
+        _bankNameController.text = _nameWithoutExtension(inspection.name);
+        _startPageController.text = '1';
+        _endPageController.text = inspection.totalPages.toString();
+        _status = 'PDF 已载入';
+      });
+    } catch (error) {
+      _showMessage('读取 PDF 失败：$error');
+      setState(() => _status = '读取失败');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _startGeneration({GenerationJob? resumeJob}) async {
+    var settings = widget.aiSettings;
+    if (!settings.isConfigured) {
+      settings = await widget.onRequireAiSettings();
+      if (!settings.isConfigured) {
+        _showMessage('请先配置 AI API Key 和模型');
+        return;
+      }
+    }
+
+    final job = resumeJob ?? _newJob();
+    if (job == null) return;
+    await _runJob(job, settings);
+  }
+
+  GenerationJob? _newJob() {
+    final inspection = _inspection;
+    if (inspection == null) {
+      _showMessage('请先选择 PDF');
+      return null;
+    }
+    final bankName = _bankNameController.text.trim();
+    final group = _groupController.text.trim();
+    final prefix = _prefixController.text.trim().isEmpty
+        ? 'Q'
+        : _prefixController.text.trim();
+    if (bankName.isEmpty || group.isEmpty) {
+      _showMessage('请填写题库名称和考试分组');
+      return null;
+    }
+    final start = int.tryParse(_startPageController.text.trim()) ?? 1;
+    final end =
+        int.tryParse(_endPageController.text.trim()) ?? inspection.totalPages;
+    if (start < 1 || end < start || end > inspection.totalPages) {
+      _showMessage('页码范围不正确');
+      return null;
+    }
+    final now = DateTime.now();
+    return GenerationJob(
+      id: 'gen_${now.microsecondsSinceEpoch}',
+      pdfPath: inspection.path,
+      pdfName: inspection.name,
+      bankName: bankName,
+      examGroup: group,
+      questionPrefix: prefix,
+      startPage: start,
+      endPage: end,
+      totalPages: inspection.totalPages,
+      nextChunkIndex: 0,
+      completedQuestions: const [],
+      errors: const [],
+      completed: false,
+      createdAt: now.toIso8601String(),
+      updatedAt: now.toIso8601String(),
+    );
+  }
+
+  Future<void> _runJob(GenerationJob job, AiSettings settings) async {
+    setState(() {
+      _busy = true;
+      _cancelRequested = false;
+      _status = '开始生成题库...';
+      _lastBank = null;
+    });
+    await _store.saveJob(job);
+    try {
+      final bank = await _generationService.generate(
+        initialJob: job,
+        settings: settings,
+        shouldCancel: () => _cancelRequested,
+        onProgress: (progress) {
+          if (!mounted) return;
+          setState(() {
+            _progress = progress;
+            _status = progress.message.isEmpty
+                ? progress.stage
+                : progress.message;
+          });
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _lastBank = bank;
+        _latestJob = null;
+        _status = '生成完成，共 ${bank.questions.length} 题';
+      });
+      widget.onBankGenerated(bank);
+    } on GenerationCancelledException {
+      await _loadLatestJob();
+      if (mounted) setState(() => _status = '已暂停，可稍后继续');
+    } catch (error) {
+      await _loadLatestJob();
+      if (mounted) setState(() => _status = '生成失败：$error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _exportLastBank() async {
+    final bank = _lastBank;
+    if (bank == null) {
+      _showMessage('还没有可导出的题库');
+      return;
+    }
+    final fileName = '${_safeFileName(bank.name)}.json';
+    final dir = Directory.systemTemp.createTempSync('exam_bank_export_');
+    final file = File('${dir.path}/$fileName');
+    await file.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(bank.toJson()),
+    );
+    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final inspection = _inspection;
+    final progress = _progress;
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('题库生成', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: _busy ? null : _pickPdf,
+                      icon: const Icon(Icons.picture_as_pdf_outlined),
+                      label: const Text('选择 PDF'),
+                    ),
+                    if (_latestJob != null)
+                      OutlinedButton.icon(
+                        onPressed: _busy
+                            ? null
+                            : () => _startGeneration(resumeJob: _latestJob),
+                        icon: const Icon(Icons.replay_outlined),
+                        label: const Text('继续上次任务'),
+                      ),
+                    OutlinedButton.icon(
+                      onPressed: _lastBank == null ? null : _exportLastBank,
+                      icon: const Icon(Icons.ios_share_outlined),
+                      label: const Text('导出 JSON'),
+                    ),
+                  ],
+                ),
+                if (inspection != null) ...[
+                  const SizedBox(height: 12),
+                  Text('文件：${inspection.name}'),
+                  Text(
+                    '页数：${inspection.totalPages}，大小：${_formatBytes(inspection.sizeBytes)}',
+                  ),
+                  Text(
+                    '语言：${inspection.languageHint}，类型：${inspection.scannedLike ? '疑似扫描件' : '可抽取文本'}',
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                TextField(
+                  controller: _bankNameController,
+                  decoration: const InputDecoration(labelText: '题库名称'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _groupController,
+                  decoration: const InputDecoration(labelText: '考试分组'),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _prefixController,
+                        decoration: const InputDecoration(labelText: '题号前缀'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: _startPageController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: '起始页'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: _endPageController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: '结束页'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _busy ? null : _startGeneration,
+                        icon: const Icon(Icons.auto_fix_high),
+                        label: const Text('开始生成'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    OutlinedButton.icon(
+                      onPressed: _busy
+                          ? () => setState(() => _cancelRequested = true)
+                          : null,
+                      icon: const Icon(Icons.pause_circle_outline),
+                      label: const Text('暂停'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('进度', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 10),
+                LinearProgressIndicator(value: progress?.value),
+                const SizedBox(height: 10),
+                Text(_status.isEmpty ? '等待选择 PDF' : _status),
+                if (progress != null) ...[
+                  Text('阶段：${progress.stage}'),
+                  Text(
+                    '页码：${progress.currentPage}/${progress.totalPages}，片段：${progress.currentChunk}/${progress.totalChunks}，已生成：${progress.successCount} 题',
+                  ),
+                  if (progress.warning.trim().isNotEmpty)
+                    Text(
+                      progress.warning,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _nameWithoutExtension(String name) {
+    final dot = name.lastIndexOf('.');
+    return dot <= 0 ? name : name.substring(0, dot);
+  }
+
+  String _safeFileName(String value) {
+    return value.replaceAll(RegExp(r'[\\/:*?"<>|]+'), '_').trim();
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+  }
+}
+
 class AiSettingsDialog extends StatefulWidget {
   const AiSettingsDialog({
     super.key,
@@ -1108,7 +2303,7 @@ enum PracticeMode { bank, group }
 
 Future<List<ExamRecord>> _loadRecords() async {
   try {
-    final file = _recordsFile();
+    final file = await _recordsFile();
     if (!await file.exists()) return [];
     final content = await file.readAsString();
     return (jsonDecode(content) as List<dynamic>)
@@ -1120,7 +2315,7 @@ Future<List<ExamRecord>> _loadRecords() async {
 }
 
 Future<void> _saveRecords(List<ExamRecord> records) async {
-  final file = _recordsFile();
+  final file = await _recordsFile();
   await file.parent.create(recursive: true);
   await file.writeAsString(
     jsonEncode(records.map((item) => item.toJson()).toList()),
@@ -1129,7 +2324,7 @@ Future<void> _saveRecords(List<ExamRecord> records) async {
 
 Future<AiSettings> _loadAiSettings() async {
   try {
-    final file = _aiSettingsFile();
+    final file = await _aiSettingsFile();
     if (!await file.exists()) return AiSettings.empty;
     final content = await file.readAsString();
     return AiSettings.fromJson(jsonDecode(content) as Map<String, dynamic>);
@@ -1139,23 +2334,36 @@ Future<AiSettings> _loadAiSettings() async {
 }
 
 Future<void> _saveAiSettings(AiSettings settings) async {
-  final file = _aiSettingsFile();
+  final file = await _aiSettingsFile();
   await file.parent.create(recursive: true);
   await file.writeAsString(jsonEncode(settings.toJson()));
 }
 
-File _recordsFile() =>
-    File('${_appDataDirectory().path}/$recordStorageKey.json');
+Future<File> _recordsFile() async =>
+    File('${(await _appDataDirectory()).path}/$recordStorageKey.json');
 
-File _aiSettingsFile() =>
-    File('${_appDataDirectory().path}/$aiSettingsFileName');
+Future<File> _aiSettingsFile() async =>
+    File('${(await _appDataDirectory()).path}/$aiSettingsFileName');
 
-Directory _appDataDirectory() {
-  final env = Platform.environment;
-  final base = Platform.isWindows
-      ? (env['APPDATA'] ?? Directory.systemTemp.path)
-      : (env['HOME'] ?? Directory.systemTemp.path);
-  return Directory('$base/ComprehensiveExamSystem');
+Future<Directory> _generatedBanksDirectory() async => Directory(
+  '${(await _appDataDirectory()).path}/$generatedBankDirectoryName',
+);
+
+Future<Directory> _generationJobsDirectory() async => Directory(
+  '${(await _appDataDirectory()).path}/$generationJobDirectoryName',
+);
+
+Future<Directory> _appDataDirectory() async {
+  try {
+    final directory = await getApplicationSupportDirectory();
+    return Directory('${directory.path}/ComprehensiveExamSystem');
+  } catch (_) {
+    final env = Platform.environment;
+    final base = Platform.isWindows
+        ? (env['APPDATA'] ?? Directory.systemTemp.path)
+        : (env['HOME'] ?? Directory.systemTemp.path);
+    return Directory('$base/ComprehensiveExamSystem');
+  }
 }
 
 String _formatDateTime(DateTime value) {
