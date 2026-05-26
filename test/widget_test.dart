@@ -1,4 +1,6 @@
 import 'package:comprehensive_exam_system/main.dart';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -69,6 +71,27 @@ void main() {
       pdfFileNameFromPath(r'C:\Users\pc\Documents\保險考證\卷2模擬題.pdf'),
       '卷2模擬題.pdf',
     );
+  });
+
+  test('sample scanned PDF can be rendered for OCR when available', () async {
+    const path = r'C:\Users\pc\Documents\保險考證\卷2模擬題.pdf';
+    if (!File(path).existsSync()) return;
+
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final service = PdfExtractionService();
+    final info = await service.inspect(path);
+    final pages = await service.extractPages(
+      path: info.path,
+      startPage: 1,
+      endPage: 1,
+      onPage: (_, _) {},
+      shouldCancel: () => false,
+    );
+
+    expect(info.name, '卷2模擬題.pdf');
+    expect(pages.single.needsOcr, isTrue);
+    expect(pages.single.imageBytes, isNotNull);
+    expect(pages.single.imageBytes!.length, greaterThan(10000));
   });
 
   testWidgets('loads the exam home page', (tester) async {

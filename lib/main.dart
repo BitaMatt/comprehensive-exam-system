@@ -6,8 +6,10 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:pdfrx/pdfrx.dart' as pdfrx;
 import 'package:share_plus/share_plus.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart' as sfpdf;
 
@@ -29,6 +31,8 @@ const bankAssets = [
 ];
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  pdfrx.pdfrxFlutterInitialize();
   runApp(const ExamApp());
 }
 
@@ -626,6 +630,7 @@ class PdfExtractionService {
   }) async {
     final bytes = await File(path).readAsBytes();
     final document = sfpdf.PdfDocument(inputBytes: bytes);
+    pdfrx.PdfDocument? renderDocument;
     try {
       final extractor = sfpdf.PdfTextExtractor(document);
       final totalPages = document.pages.count;
@@ -639,13 +644,44 @@ class PdfExtractionService {
             .extractText(startPageIndex: page - 1, endPageIndex: page - 1)
             .trim();
         final needsOcr = text.replaceAll(RegExp(r'\s+'), '').length < 80;
+        Uint8List? imageBytes;
+        if (needsOcr) {
+          renderDocument ??= await pdfrx.PdfDocument.openFile(path);
+          imageBytes = await _renderPageAsJpeg(renderDocument, page);
+        }
         pages.add(
-          PdfPageContent(pageNumber: page, text: text, needsOcr: needsOcr),
+          PdfPageContent(
+            pageNumber: page,
+            text: text,
+            needsOcr: needsOcr,
+            imageBytes: imageBytes,
+          ),
         );
       }
       return pages;
     } finally {
       document.dispose();
+      await renderDocument?.dispose();
+    }
+  }
+
+  Future<Uint8List?> _renderPageAsJpeg(
+    pdfrx.PdfDocument document,
+    int pageNumber,
+  ) async {
+    final page = document.pages[pageNumber - 1];
+    final width = min(1800.0, page.width * 2.5);
+    final height = width * page.height / page.width;
+    final rendered = await page.render(
+      width: width.round(),
+      height: height.round(),
+    );
+    if (rendered == null) return null;
+    try {
+      final image = rendered.createImageNF();
+      return Uint8List.fromList(img.encodeJpg(image, quality: 82));
+    } finally {
+      rendered.dispose();
     }
   }
 
@@ -940,9 +976,13 @@ ${chunk.pages.map((page) => '--- 第 ${page.pageNumber} 页 ---\n${page.text}').
         .where((page) => page.imageBytes != null)
         .toList();
     if (imagePages.isEmpty) return prompt;
-    if (imagePages.any((page) => page.imageBytes == null)) {
-      throw const AiRequestException(
-        '检测到扫描页，但当前 Windows/Android 稳定版本未启用 PDF 页面渲染。请先使用外部 OCR 转成可选中文字 PDF 后再生成题库。',
+    final missingImagePages = imagePages
+        .where((page) => page.imageBytes == null)
+        .map((page) => page.pageNumber)
+        .toList();
+    if (missingImagePages.isNotEmpty) {
+      throw AiRequestException(
+        '第 ${missingImagePages.join(', ')} 页是扫描页，但页面渲染失败，无法发送给视觉模型识别。',
       );
     }
     return [
