@@ -64,6 +64,13 @@ void main() {
     expect(job.completed, isFalse);
   });
 
+  test('pdf file names with Chinese characters do not need URI decoding', () {
+    expect(
+      pdfFileNameFromPath(r'C:\Users\pc\Documents\保險考證\卷2模擬題.pdf'),
+      '卷2模擬題.pdf',
+    );
+  });
+
   testWidgets('loads the exam home page', (tester) async {
     await tester.pumpWidget(const ExamApp());
     await tester.pump();

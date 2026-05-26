@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart' as sfpdf;
@@ -604,9 +605,7 @@ class PdfExtractionService {
       final previewText = preview.join('\n').trim();
       return PdfInspection(
         path: path,
-        name: file.uri.pathSegments.isEmpty
-            ? 'document.pdf'
-            : Uri.decodeComponent(file.uri.pathSegments.last),
+        name: pdfFileNameFromPath(path),
         sizeBytes: await file.length(),
         totalPages: totalPages,
         previewText: previewText,
@@ -1072,6 +1071,11 @@ class GenerationCancelledException implements Exception {
 
   @override
   String toString() => '已取消生成';
+}
+
+String pdfFileNameFromPath(String path) {
+  final name = p.basename(path);
+  return name.trim().isEmpty ? 'document.pdf' : name;
 }
 
 class ExamHomePage extends StatefulWidget {
