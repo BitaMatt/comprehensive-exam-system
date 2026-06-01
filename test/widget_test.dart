@@ -92,6 +92,9 @@ void main() {
     expect(pages.single.needsOcr, isTrue);
     expect(pages.single.imageBytes, isNotNull);
     expect(pages.single.imageBytes!.length, greaterThan(10000));
+    if (await _hasRapidOcr()) {
+      expect(pages.single.ocrText, contains('保险'));
+    }
   });
 
   testWidgets('loads the exam home page', (tester) async {
@@ -102,4 +105,16 @@ void main() {
     expect(find.text('练习'), findsWidgets);
     expect(find.text('生成'), findsOneWidget);
   });
+}
+
+Future<bool> _hasRapidOcr() async {
+  try {
+    final result = await Process.run('python', [
+      '-c',
+      'import rapidocr_onnxruntime',
+    ]).timeout(const Duration(seconds: 8));
+    return result.exitCode == 0;
+  } catch (_) {
+    return false;
+  }
 }

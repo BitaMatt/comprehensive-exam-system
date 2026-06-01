@@ -62,8 +62,10 @@ VS Code 快速入口：
 1. 用户选择 PDF。
 2. 应用使用 `syncfusion_flutter_pdf` 抽取可选中文本。
 3. 文本密度过低的页面会使用 `pdfrx` 渲染为 JPEG 图片。
-4. 应用把文本和必要的页面图片按 chunk 发送给用户配置的 AI 模型。
-5. AI 返回题库 JSON 后，应用校验单选 A-D 题并保存。
+4. Windows 端会优先尝试 RapidOCR，本机没有 RapidOCR 时再尝试 Tesseract。
+5. 应用把文本、OCR 文本和必要的页面图片按 chunk 发送给用户配置的 AI 模型。
+6. 如果接口返回不支持多模态/图片分析，会自动降级为 OCR 文本解析。
+7. AI 返回题库 JSON 后，应用校验单选 A-D 题并保存。
 
 生成数据位置：
 
@@ -76,7 +78,13 @@ VS Code 快速入口：
 
 - API Key 只保存到本机应用数据目录，不写入源码。
 - 生成题库默认自动加入题库列表，也可以导出 JSON。
-- 扫描件需要用户配置的模型支持图片输入；如果模型不支持视觉输入，请换用视觉模型或先用外部 OCR 转成可选中文字 PDF。
+- 扫描件优先使用视觉模型；如果模型不支持图片输入，Windows 端会尝试本地 OCR。推荐安装 `rapidocr_onnxruntime`，Tesseract 可作为兜底但表格题准确率较低。
+
+可选本地 OCR 环境：
+
+```powershell
+python -m pip install rapidocr_onnxruntime "numpy<2"
+```
 - `syncfusion_flutter_pdf` 受 Syncfusion license 约束，发布前请确认项目符合其授权要求。
 
 ## 打包

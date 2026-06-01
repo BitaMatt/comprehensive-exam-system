@@ -141,20 +141,45 @@ class Question {
   };
 
   factory Question.fromJson(Map<String, dynamic> json) {
-    final rawOptions = json['options'] as Map<String, dynamic>? ?? {};
+    final rawOptions =
+        _asStringMap(json['options']) ??
+        _asStringMap(json['choices']) ??
+        _asStringMap(json['选项']) ??
+        {};
     return Question(
       id: (json['id'] ?? '').toString(),
-      text: (json['question'] ?? '').toString(),
+      text: (json['question'] ?? json['stem'] ?? json['题目'] ?? json['题干'] ?? '')
+          .toString(),
       options: {
         for (final key in ['A', 'B', 'C', 'D'])
-          key: (rawOptions[key] ?? '').toString(),
+          key:
+              (rawOptions[key] ??
+                      rawOptions['$key.'] ??
+                      rawOptions['$key、'] ??
+                      '')
+                  .toString(),
       },
-      answer: (json['answer'] ?? '').toString().trim().toUpperCase(),
-      analysis: (json['analysis'] ?? '').toString(),
+      answer: (json['answer'] ?? json['correct_answer'] ?? json['答案'] ?? '')
+          .toString()
+          .replaceAll(RegExp(r'[^A-Da-d]'), '')
+          .trim()
+          .toUpperCase(),
+      analysis: (json['analysis'] ?? json['explanation'] ?? json['解析'] ?? '')
+          .toString(),
       sourceBank: (json['source_bank'] ?? '').toString(),
       examGroup: (json['exam_group'] ?? '').toString(),
     );
   }
+}
+
+Map<String, dynamic>? _asStringMap(Object? value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) {
+    return {
+      for (final entry in value.entries) entry.key.toString(): entry.value,
+    };
+  }
+  return null;
 }
 
 class ExamRecord {
@@ -372,12 +397,14 @@ class PdfPageContent {
     required this.pageNumber,
     required this.text,
     required this.needsOcr,
+    this.ocrText = '',
     this.imageBytes,
   });
 
   final int pageNumber;
   final String text;
   final bool needsOcr;
+  final String ocrText;
   final Uint8List? imageBytes;
 }
 
@@ -590,7 +617,9 @@ class AiRequestException implements Exception {
 }
 
 class PdfExtractionService {
-  const PdfExtractionService();
+  const PdfExtractionService({this.ocrService = const LocalOcrService()});
+
+  final LocalOcrService ocrService;
 
   Future<PdfInspection> inspect(String path) async {
     final file = File(path);
@@ -645,15 +674,20 @@ class PdfExtractionService {
             .trim();
         final needsOcr = text.replaceAll(RegExp(r'\s+'), '').length < 80;
         Uint8List? imageBytes;
+        var ocrText = '';
         if (needsOcr) {
           renderDocument ??= await pdfrx.PdfDocument.openFile(path);
           imageBytes = await _renderPageAsJpeg(renderDocument, page);
+          if (imageBytes != null) {
+            ocrText = await ocrService.recognize(imageBytes, pageNumber: page);
+          }
         }
         pages.add(
           PdfPageContent(
             pageNumber: page,
             text: text,
             needsOcr: needsOcr,
+            ocrText: ocrText,
             imageBytes: imageBytes,
           ),
         );
@@ -679,10 +713,42 @@ class PdfExtractionService {
     if (rendered == null) return null;
     try {
       final image = rendered.createImageNF();
-      return Uint8List.fromList(img.encodeJpg(image, quality: 82));
+      final cropped = _cropWhitespace(image);
+      return Uint8List.fromList(img.encodeJpg(cropped, quality: 88));
     } finally {
       rendered.dispose();
     }
+  }
+
+  img.Image _cropWhitespace(img.Image source) {
+    var left = source.width;
+    var top = source.height;
+    var right = 0;
+    var bottom = 0;
+    for (var y = 0; y < source.height; y += 1) {
+      for (var x = 0; x < source.width; x += 1) {
+        final pixel = source.getPixel(x, y);
+        final darkEnough = pixel.r < 238 || pixel.g < 238 || pixel.b < 238;
+        if (!darkEnough) continue;
+        if (x < left) left = x;
+        if (x > right) right = x;
+        if (y < top) top = y;
+        if (y > bottom) bottom = y;
+      }
+    }
+    if (right <= left || bottom <= top) return source;
+    const margin = 24;
+    left = max(0, left - margin);
+    top = max(0, top - margin);
+    right = min(source.width - 1, right + margin);
+    bottom = min(source.height - 1, bottom + margin);
+    return img.copyCrop(
+      source,
+      x: left,
+      y: top,
+      width: right - left + 1,
+      height: bottom - top + 1,
+    );
   }
 
   String _detectLanguage(String text) {
@@ -691,6 +757,99 @@ class PdfExtractionService {
     if (chinese > latin) return '中文';
     if (latin > 0) return '英文/拉丁文字';
     return '未知';
+  }
+}
+
+class LocalOcrService {
+  const LocalOcrService();
+
+  Future<String> recognize(
+    Uint8List imageBytes, {
+    required int pageNumber,
+  }) async {
+    if (!Platform.isWindows) return '';
+    final tempDir = await Directory.systemTemp.createTemp('exam_ocr_');
+    final imageFile = File('${tempDir.path}/page_$pageNumber.jpg');
+    try {
+      await imageFile.writeAsBytes(imageBytes);
+      final rapidText = await _recognizeWithRapidOcr(imageFile);
+      if (rapidText.trim().isNotEmpty) return rapidText;
+
+      final executable = await _findTesseract();
+      if (executable == null) return '';
+      final result = await Process.run(executable, [
+        imageFile.path,
+        'stdout',
+        '-l',
+        'chi_tra+eng',
+        '--psm',
+        '6',
+        '--oem',
+        '1',
+        '-c',
+        'preserve_interword_spaces=1',
+      ]).timeout(const Duration(seconds: 45));
+      final output = '${result.stdout}\n${result.stderr}'.trim();
+      if (result.exitCode != 0) return '';
+      return output;
+    } catch (_) {
+      return '';
+    } finally {
+      try {
+        await tempDir.delete(recursive: true);
+      } catch (_) {
+        // Best-effort cleanup for temporary OCR images.
+      }
+    }
+  }
+
+  Future<String> _recognizeWithRapidOcr(File imageFile) async {
+    const script = r'''
+import sys
+try:
+    from rapidocr_onnxruntime import RapidOCR
+    ocr = RapidOCR()
+    result, _ = ocr(sys.argv[1])
+    if result:
+        print("\n".join(str(item[1]) for item in result if len(item) > 1))
+except Exception:
+    pass
+''';
+    try {
+      final result = await Process.run('python', [
+        '-c',
+        script,
+        imageFile.path,
+      ]).timeout(const Duration(seconds: 60));
+      if (result.exitCode != 0) return '';
+      return result.stdout.toString().trim();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<String?> _findTesseract() async {
+    final candidates = <String>[
+      Platform.environment['TESSERACT_PATH'] ?? '',
+      'tesseract',
+      r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+      r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+      r'C:\Users\pc\Desktop\useful_tool\TesseractOCR\tesseract.exe',
+    ].where((item) => item.trim().isNotEmpty).toList();
+    for (final candidate in candidates) {
+      try {
+        final result = await Process.run(candidate, [
+          '--list-langs',
+        ]).timeout(const Duration(seconds: 6));
+        if (result.exitCode == 0 &&
+            result.stdout.toString().contains('chi_tra')) {
+          return candidate;
+        }
+      } catch (_) {
+        // Try the next candidate.
+      }
+    }
+    return null;
   }
 }
 
@@ -892,33 +1051,41 @@ class QuestionGenerationService {
     Object? lastError;
     for (var attempt = 0; attempt < 3; attempt += 1) {
       try {
-        final content = await aiService.chatCompletion(
+        var includeImages = true;
+        var content = await _requestChunkParse(
           settings: settings,
-          messages: [
-            {
-              'role': 'system',
-              'content':
-                  '你是考试题库整理助手。只输出严格 JSON，不要解释。只提取单选 A/B/C/D 题。无法确定答案的题不要输出。',
-            },
-            {
-              'role': 'user',
-              'content': _buildChunkContent(
-                chunk: chunk,
-                bankName: bankName,
-                examGroup: examGroup,
-                prefix: prefix,
-                existingCount: existingCount,
-                previousError: attempt == 0 ? '' : '上次错误：$lastError',
-              ),
-            },
-          ],
+          chunk: chunk,
+          bankName: bankName,
+          examGroup: examGroup,
+          prefix: prefix,
+          existingCount: existingCount,
+          previousError: attempt == 0 ? '' : '上次错误：$lastError',
+          includeImages: includeImages,
         );
+        if (_looksLikeMultimodalRejected(content)) {
+          includeImages = false;
+          content = await _requestChunkParse(
+            settings: settings,
+            chunk: chunk,
+            bankName: bankName,
+            examGroup: examGroup,
+            prefix: prefix,
+            existingCount: existingCount,
+            previousError: '图片接口不可用，改用本地 OCR 文本解析。',
+            includeImages: includeImages,
+          );
+        }
         final json = _decodeJsonObject(content);
         final rawQuestions = json['questions'];
-        if (rawQuestions is! List) {
+        final questionItems = rawQuestions is List
+            ? rawQuestions
+            : (json['items'] is List
+                  ? json['items'] as List
+                  : (json['题目'] is List ? json['题目'] as List : null));
+        if (questionItems == null) {
           throw const FormatException('缺少 questions 数组');
         }
-        final questions = rawQuestions
+        final questions = questionItems
             .map(
               (item) =>
                   item is Map<String, dynamic> ? Question.fromJson(item) : null,
@@ -930,7 +1097,9 @@ class QuestionGenerationService {
             )
             .toList();
         if (questions.isEmpty) {
-          throw const FormatException('没有解析出有效单选题');
+          throw FormatException(
+            '没有解析出有效单选题。AI 返回：${_shortenForError(content)}',
+          );
         }
         return questions;
       } catch (error) {
@@ -940,6 +1109,80 @@ class QuestionGenerationService {
     throw AiRequestException('AI 解析失败：$lastError');
   }
 
+  Future<String> _requestChunkParse({
+    required AiSettings settings,
+    required QuestionChunk chunk,
+    required String bankName,
+    required String examGroup,
+    required String prefix,
+    required int existingCount,
+    required String previousError,
+    required bool includeImages,
+  }) async {
+    try {
+      return await aiService.chatCompletion(
+        settings: settings,
+        messages: [
+          {
+            'role': 'system',
+            'content': '你是考试题库整理助手。只输出严格 JSON，不要解释。只提取单选 A/B/C/D 题。',
+          },
+          {
+            'role': 'user',
+            'content': _buildChunkContent(
+              chunk: chunk,
+              bankName: bankName,
+              examGroup: examGroup,
+              prefix: prefix,
+              existingCount: existingCount,
+              previousError: previousError,
+              includeImages: includeImages,
+            ),
+          },
+        ],
+      );
+    } on AiRequestException catch (error) {
+      if (includeImages && _looksLikeMultimodalRejected(error.message)) {
+        return await aiService.chatCompletion(
+          settings: settings,
+          messages: [
+            {
+              'role': 'system',
+              'content': '你是考试题库整理助手。只输出严格 JSON，不要解释。只提取单选 A/B/C/D 题。',
+            },
+            {
+              'role': 'user',
+              'content': _buildChunkContent(
+                chunk: chunk,
+                bankName: bankName,
+                examGroup: examGroup,
+                prefix: prefix,
+                existingCount: existingCount,
+                previousError: '图片接口不可用，改用本地 OCR 文本解析。',
+                includeImages: false,
+              ),
+            },
+          ],
+        );
+      }
+      rethrow;
+    }
+  }
+
+  bool _looksLikeMultimodalRejected(String value) {
+    final lower = value.toLowerCase();
+    return lower.contains('multimodal') ||
+        lower.contains('image analysis') ||
+        lower.contains('图片分析') ||
+        lower.contains('多模态');
+  }
+
+  String _shortenForError(String value) {
+    final compact = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (compact.length <= 500) return compact;
+    return '${compact.substring(0, 500)}...';
+  }
+
   Object _buildChunkContent({
     required QuestionChunk chunk,
     required String bankName,
@@ -947,11 +1190,21 @@ class QuestionGenerationService {
     required String prefix,
     required int existingCount,
     required String previousError,
+    required bool includeImages,
   }) {
     final prompt =
         '''
 $previousError
-请从以下 PDF 内容中提取单选题，输出 JSON：
+你正在处理香港保险考试模拟题。请从 PDF 页面文本和/或页面图片中识别所有单选题。
+
+必须执行：
+1. 逐行读取图片里的表格、手写圈选和印刷文字。
+2. 每一道题都必须包含题干、A/B/C/D 四个选项。
+3. 如果能从圈选、手写字母或答案标记看出答案，请填入 answer；看不出时也要根据题目和选项推断最可能答案。
+4. 不要因为页面是扫描件、表格排版、繁体中文或图片模糊就返回空数组。
+5. 只输出 JSON，不要 Markdown，不要解释。
+
+输出 JSON 格式：
 {
   "name": "$bankName",
   "exam_group": "$examGroup",
@@ -967,15 +1220,18 @@ $previousError
     }
   ]
 }
-题号从 ${existingCount + 1} 继续。保留原文语言，不要编造题目或答案。
+题号从 ${existingCount + 1} 继续。保留原文语言。若页面上有多题，全部输出。
 
 PDF 页文本：
 ${chunk.pages.map((page) => '--- 第 ${page.pageNumber} 页 ---\n${page.text}').join('\n\n')}
+
+本地 OCR 文本：
+${chunk.pages.map((page) => '--- 第 ${page.pageNumber} 页 OCR ---\n${page.ocrText}').join('\n\n')}
 ''';
     final imagePages = chunk.pages
         .where((page) => page.imageBytes != null)
         .toList();
-    if (imagePages.isEmpty) return prompt;
+    if (!includeImages || imagePages.isEmpty) return prompt;
     final missingImagePages = imagePages
         .where((page) => page.imageBytes == null)
         .map((page) => page.pageNumber)
