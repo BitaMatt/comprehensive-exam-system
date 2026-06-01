@@ -79,11 +79,15 @@ class QuestionBank {
     required this.name,
     required this.examGroup,
     required this.questions,
+    this.generatedId = '',
   });
 
   final String name;
   final String examGroup;
   final List<Question> questions;
+  final String generatedId;
+
+  bool get isGenerated => generatedId.trim().isNotEmpty;
 
   Map<String, dynamic> toJson() => {
     'name': name,
@@ -97,11 +101,15 @@ class QuestionBank {
         .map((item) => Question.fromJson(item as Map<String, dynamic>))
         .where((question) => question.isValid)
         .toList();
+    final metadata = json['metadata'] is Map<String, dynamic>
+        ? json['metadata'] as Map<String, dynamic>
+        : const <String, dynamic>{};
 
     return QuestionBank(
       name: (json['name'] ?? '未命名题库').toString(),
       examGroup: (json['exam_group'] ?? '未分组').toString(),
       questions: questions,
+      generatedId: (metadata['id'] ?? json['generated_id'] ?? '').toString(),
     );
   }
 }
@@ -656,6 +664,7 @@ class PdfExtractionService {
     required int endPage,
     required void Function(int page, int total) onPage,
     required bool Function() shouldCancel,
+    void Function(String message)? onLog,
   }) async {
     final bytes = await File(path).readAsBytes();
     final document = sfpdf.PdfDocument(inputBytes: bytes);
@@ -669,17 +678,30 @@ class PdfExtractionService {
       for (var page = normalizedStart; page <= normalizedEnd; page += 1) {
         if (shouldCancel()) break;
         onPage(page, totalPages);
+        onLog?.call('开始读取第 $page/$totalPages 页');
         final text = extractor
             .extractText(startPageIndex: page - 1, endPageIndex: page - 1)
             .trim();
         final needsOcr = text.replaceAll(RegExp(r'\s+'), '').length < 80;
+        onLog?.call(
+          '第 $page 页文本长度 ${text.length}，${needsOcr ? '需要 OCR' : '直接使用文本'}',
+        );
         Uint8List? imageBytes;
         var ocrText = '';
         if (needsOcr) {
+          onLog?.call('第 $page 页正在渲染扫描页图片');
           renderDocument ??= await pdfrx.PdfDocument.openFile(path);
           imageBytes = await _renderPageAsJpeg(renderDocument, page);
           if (imageBytes != null) {
-            ocrText = await ocrService.recognize(imageBytes, pageNumber: page);
+            onLog?.call('第 $page 页图片大小 ${imageBytes.length} bytes，开始 OCR');
+            ocrText = await ocrService.recognize(
+              imageBytes,
+              pageNumber: page,
+              onLog: onLog,
+            );
+            onLog?.call('第 $page 页 OCR 文本长度 ${ocrText.length}');
+          } else {
+            onLog?.call('第 $page 页图片渲染失败');
           }
         }
         pages.add(
@@ -766,17 +788,26 @@ class LocalOcrService {
   Future<String> recognize(
     Uint8List imageBytes, {
     required int pageNumber,
+    void Function(String message)? onLog,
   }) async {
-    if (!Platform.isWindows) return '';
+    if (!Platform.isWindows) {
+      onLog?.call('本地 OCR 目前仅在 Windows 启用');
+      return '';
+    }
     final tempDir = await Directory.systemTemp.createTemp('exam_ocr_');
     final imageFile = File('${tempDir.path}/page_$pageNumber.jpg');
     try {
       await imageFile.writeAsBytes(imageBytes);
+      onLog?.call('第 $pageNumber 页尝试 RapidOCR');
       final rapidText = await _recognizeWithRapidOcr(imageFile);
       if (rapidText.trim().isNotEmpty) return rapidText;
 
+      onLog?.call('第 $pageNumber 页 RapidOCR 不可用或无结果，尝试 Tesseract');
       final executable = await _findTesseract();
-      if (executable == null) return '';
+      if (executable == null) {
+        onLog?.call('未找到 Tesseract，可安装 RapidOCR 或 Tesseract 提升扫描件识别');
+        return '';
+      }
       final result = await Process.run(executable, [
         imageFile.path,
         'stdout',
@@ -876,8 +907,10 @@ class QuestionGenerationService {
     required AiSettings settings,
     required void Function(GenerationProgress progress) onProgress,
     required bool Function() shouldCancel,
+    void Function(String message)? onLog,
   }) async {
     var job = initialJob;
+    onLog?.call('任务 ${job.id} 开始，页码 ${job.startPage}-${job.endPage}');
     onProgress(
       GenerationProgress(
         stage: '读取 PDF',
@@ -895,6 +928,7 @@ class QuestionGenerationService {
       startPage: job.startPage,
       endPage: job.endPage,
       shouldCancel: shouldCancel,
+      onLog: onLog,
       onPage: (page, total) {
         onProgress(
           GenerationProgress(
@@ -916,6 +950,7 @@ class QuestionGenerationService {
     }
 
     final chunks = _buildChunks(pages);
+    onLog?.call('PDF 预处理完成，共 ${pages.length} 页，${chunks.length} 个片段');
     final questions = [...job.completedQuestions];
     final errors = [...job.errors];
 
@@ -941,6 +976,7 @@ class QuestionGenerationService {
       );
 
       try {
+        onLog?.call('片段 ${chunkIndex + 1}/${chunks.length} 开始 AI 解析');
         final parsed = await _parseChunk(
           settings: settings,
           chunk: chunk,
@@ -949,8 +985,10 @@ class QuestionGenerationService {
           prefix: job.questionPrefix,
           existingCount: questions.length,
         );
+        onLog?.call('片段 ${chunkIndex + 1} 解析出 ${parsed.length} 题');
         questions.addAll(_dedupe(questions, parsed));
       } catch (error) {
+        onLog?.call('片段 ${chunkIndex + 1} 失败：$error');
         errors.add(
           '第 ${chunk.pages.first.pageNumber}-${chunk.pages.last.pageNumber} 页：$error',
         );
@@ -976,6 +1014,7 @@ class QuestionGenerationService {
       name: job.bankName,
       examGroup: job.examGroup,
       questions: questions,
+      generatedId: job.id,
     );
     await store.saveGeneratedBank(
       bank: bank,
@@ -1330,6 +1369,49 @@ class GeneratedBankStore {
     await File(
       '${dir.path}/${metadata.id}.json',
     ).writeAsString(const JsonEncoder.withIndent('  ').convert(bankJson));
+  }
+
+  Future<void> deleteGeneratedBank(String id) async {
+    final file = await _generatedBankFile(id);
+    if (await file.exists()) await file.delete();
+  }
+
+  Future<QuestionBank> updateGeneratedBank({
+    required QuestionBank bank,
+    required String name,
+    required String examGroup,
+  }) async {
+    final id = bank.generatedId;
+    final updated = QuestionBank(
+      name: name,
+      examGroup: examGroup,
+      questions: [
+        for (final question in bank.questions)
+          Question(
+            id: question.id,
+            text: question.text,
+            options: question.options,
+            answer: question.answer,
+            analysis: question.analysis,
+            sourceBank: name,
+            examGroup: examGroup,
+          ),
+      ],
+      generatedId: id,
+    );
+    await saveGeneratedBank(
+      bank: updated,
+      metadata: GeneratedBankMetadata(
+        id: id,
+        name: name,
+        examGroup: examGroup,
+        questionCount: updated.questions.length,
+        sourcePdfName: '',
+        createdAt: DateTime.now().toIso8601String(),
+        status: 'edited',
+      ),
+    );
+    return updated;
   }
 
   Future<void> saveJob(GenerationJob job) async {
@@ -1891,6 +1973,25 @@ class _ExamHomePageState extends State<ExamHomePage> {
             title: Text(bank.name),
             subtitle: Text('${bank.examGroup} · ${bank.questions.length} 题'),
             children: [
+              if (bank.isGenerated)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Row(
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => _editGeneratedBank(bank),
+                        icon: const Icon(Icons.edit_outlined),
+                        label: const Text('编辑'),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: () => _deleteGeneratedBank(bank),
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('删除'),
+                      ),
+                    ],
+                  ),
+                ),
               for (final question in bank.questions.take(12))
                 ListTile(
                   dense: true,
@@ -1914,6 +2015,94 @@ class _ExamHomePageState extends State<ExamHomePage> {
         );
       },
     );
+  }
+
+  Future<void> _deleteGeneratedBank(QuestionBank bank) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除题库'),
+        content: Text('确定删除「${bank.name}」吗？此操作不会删除原始 PDF。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _generatedBankStore.deleteGeneratedBank(bank.generatedId);
+    if (!mounted) return;
+    setState(() {
+      _banks = _banks
+          .where((item) => item.generatedId != bank.generatedId)
+          .toList();
+      if (_selectedTarget == bank.name) _selectedTarget = _targets.firstOrNull;
+      _resetExam();
+    });
+    _showMessage('题库已删除');
+  }
+
+  Future<void> _editGeneratedBank(QuestionBank bank) async {
+    final nameController = TextEditingController(text: bank.name);
+    final groupController = TextEditingController(text: bank.examGroup);
+    final result = await showDialog<QuestionBank>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('编辑题库'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: '题库名称'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: groupController,
+              decoration: const InputDecoration(labelText: '考试分组'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final name = nameController.text.trim();
+              final group = groupController.text.trim();
+              if (name.isEmpty || group.isEmpty) return;
+              final updated = await _generatedBankStore.updateGeneratedBank(
+                bank: bank,
+                name: name,
+                examGroup: group,
+              );
+              if (context.mounted) Navigator.pop(context, updated);
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    nameController.dispose();
+    groupController.dispose();
+    if (result == null || !mounted) return;
+    setState(() {
+      _banks = [
+        for (final item in _banks)
+          item.generatedId == result.generatedId ? result : item,
+      ];
+      if (_selectedTarget == bank.name) _selectedTarget = result.name;
+      _resetExam();
+    });
+    _showMessage('题库已更新');
   }
 
   Widget _buildRecordPage() {
@@ -1974,6 +2163,7 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
   var _busy = false;
   var _cancelRequested = false;
   var _status = '';
+  final List<String> _logs = [];
 
   QuestionGenerationService get _generationService => QuestionGenerationService(
     aiService: const AiService(),
@@ -2016,7 +2206,9 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
       _status = '正在读取 PDF 信息...';
       _progress = null;
       _lastBank = null;
+      _logs.clear();
     });
+    _addLog('选择 PDF：$path');
     try {
       final inspection = await _pdfService.inspect(path);
       if (!mounted) return;
@@ -2093,18 +2285,22 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
   }
 
   Future<void> _runJob(GenerationJob job, AiSettings settings) async {
+    _addLog('开始生成：${job.pdfName}，页码 ${job.startPage}-${job.endPage}');
     setState(() {
       _busy = true;
       _cancelRequested = false;
       _status = '开始生成题库...';
       _lastBank = null;
+      _logs.clear();
     });
+    _addLog('开始生成：${job.pdfName}，页码 ${job.startPage}-${job.endPage}');
     await _store.saveJob(job);
     try {
       final bank = await _generationService.generate(
         initialJob: job,
         settings: settings,
         shouldCancel: () => _cancelRequested,
+        onLog: _addLog,
         onProgress: (progress) {
           if (!mounted) return;
           setState(() {
@@ -2121,6 +2317,7 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
         _latestJob = null;
         _status = '生成完成，共 ${bank.questions.length} 题';
       });
+      _addLog('生成完成：${bank.questions.length} 题');
       widget.onBankGenerated(bank);
     } on GenerationCancelledException {
       await _loadLatestJob();
@@ -2146,6 +2343,17 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
       const JsonEncoder.withIndent('  ').convert(bank.toJson()),
     );
     await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
+  }
+
+  void _addLog(String message) {
+    if (!mounted) return;
+    final now = DateTime.now();
+    final time =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
+    setState(() {
+      _logs.add('[$time] $message');
+      if (_logs.length > 300) _logs.removeAt(0);
+    });
   }
 
   void _showMessage(String message) {
@@ -2300,6 +2508,26 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
                 ],
               ],
             ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: ExpansionTile(
+            leading: const Icon(Icons.bug_report_outlined),
+            title: Text('调试日志（${_logs.length}）'),
+            children: [
+              Container(
+                width: double.infinity,
+                constraints: const BoxConstraints(maxHeight: 260),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: SingleChildScrollView(
+                  child: SelectableText(
+                    _logs.isEmpty ? '暂无日志' : _logs.join('\n'),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -2626,6 +2854,9 @@ Future<Directory> _generatedBanksDirectory() async => Directory(
 Future<Directory> _generationJobsDirectory() async => Directory(
   '${(await _appDataDirectory()).path}/$generationJobDirectoryName',
 );
+
+Future<File> _generatedBankFile(String id) async =>
+    File('${(await _generatedBanksDirectory()).path}/$id.json');
 
 Future<Directory> _appDataDirectory() async {
   try {

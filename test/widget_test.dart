@@ -66,6 +66,25 @@ void main() {
     expect(job.completed, isFalse);
   });
 
+  test('generated bank metadata marks bank editable', () {
+    final bank = QuestionBank.fromJson({
+      'name': '生成题库',
+      'exam_group': '分组',
+      'metadata': {'id': 'gen_1'},
+      'questions': [
+        {
+          'id': 'G-001',
+          'question': '有效题目？',
+          'options': {'A': '一', 'B': '二', 'C': '三', 'D': '四'},
+          'answer': 'A',
+        },
+      ],
+    });
+
+    expect(bank.isGenerated, isTrue);
+    expect(bank.generatedId, 'gen_1');
+  });
+
   test('pdf file names with Chinese characters do not need URI decoding', () {
     expect(
       pdfFileNameFromPath(r'C:\Users\pc\Documents\保險考證\卷2模擬題.pdf'),

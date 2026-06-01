@@ -74,10 +74,13 @@ VS Code 快速入口：
 %APPDATA%\ComprehensiveExamSystem\generation_jobs\
 ```
 
+生成页面底部有「调试日志」，可以查看当前是否卡在 PDF 渲染、RapidOCR、Tesseract、AI 请求或降级重试。处理扫描件时每页 OCR 可能需要数秒到数十秒，日志会持续追加实际阶段。
+
 注意：
 
 - API Key 只保存到本机应用数据目录，不写入源码。
 - 生成题库默认自动加入题库列表，也可以导出 JSON。
+- 生成题库可在题库页编辑名称/分组或删除；内置 assets 题库只读。
 - 扫描件优先使用视觉模型；如果模型不支持图片输入，Windows 端会尝试本地 OCR。推荐安装 `rapidocr_onnxruntime`，Tesseract 可作为兜底但表格题准确率较低。
 
 可选本地 OCR 环境：
