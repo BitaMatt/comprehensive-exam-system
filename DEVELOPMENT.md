@@ -169,3 +169,15 @@ gh release create v1.3.0 `
 ```powershell
 gh release upload v1.3.0 out\<file-name> --repo BitaMatt/comprehensive-exam-system --clobber
 ```
+# 开发者补充说明
+
+## 题库 JSON 导入模板
+
+模板文件位于 `templates/question_bank_template.json`。导入文件必须包含：
+
+- `name`：题库名称。
+- `exam_group`：考试分组。
+- `questions`：题目数组。
+- 每题必须包含 `question`、`options.A/B/C/D`、`answer`，`analysis` 可留空。
+
+导入、PDF 生成、AI 补解析后的题库保存到应用数据目录下的 `generated_banks/`，不要提交到 Git。

@@ -30,6 +30,115 @@ const bankAssets = [
   'assets/question_banks/bank7.json',
 ];
 
+enum ChineseLanguage { simplified, traditional }
+
+String translateChinese(String value, ChineseLanguage language) {
+  final map = language == ChineseLanguage.traditional
+      ? _simplifiedToTraditional
+      : _traditionalToSimplified;
+  final buffer = StringBuffer();
+  for (final rune in value.runes) {
+    final char = String.fromCharCode(rune);
+    buffer.write(map[char] ?? char);
+  }
+  return buffer.toString();
+}
+
+const Map<String, String> _simplifiedToTraditional = {
+  '题': '題',
+  '库': '庫',
+  '练': '練',
+  '习': '習',
+  '录': '錄',
+  '设': '設',
+  '置': '置',
+  '选': '選',
+  '择': '擇',
+  '导': '導',
+  '入': '入',
+  '删': '刪',
+  '除': '除',
+  '编': '編',
+  '辑': '輯',
+  '简': '簡',
+  '体': '體',
+  '繁': '繁',
+  '转': '轉',
+  '换': '換',
+  '显': '顯',
+  '示': '示',
+  '答': '答',
+  '案': '案',
+  '解': '解',
+  '析': '析',
+  '测': '測',
+  '试': '試',
+  '连': '連',
+  '接': '接',
+  '获': '獲',
+  '取': '取',
+  '模': '模',
+  '型': '型',
+  '开': '開',
+  '始': '始',
+  '生': '生',
+  '成': '成',
+  '进': '進',
+  '度': '度',
+  '暂': '暫',
+  '停': '停',
+  '继': '繼',
+  '续': '續',
+  '页': '頁',
+  '码': '碼',
+  '扫': '掃',
+  '描': '描',
+  '识': '識',
+  '别': '別',
+  '错': '錯',
+  '误': '誤',
+  '确': '確',
+  '认': '認',
+  '保': '保',
+  '存': '存',
+  '当': '當',
+  '前': '前',
+  '项': '項',
+  '组': '組',
+  '标': '標',
+  '签': '簽',
+  '称': '稱',
+  '数': '數',
+  '据': '據',
+  '软': '軟',
+  '件': '件',
+  '后': '後',
+  '复': '復',
+  '制': '製',
+  '为': '為',
+  '与': '與',
+  '无': '無',
+  '仅': '僅',
+  '览': '覽',
+  '余': '餘',
+  '万': '萬',
+  '个': '個',
+  '间': '間',
+  '实': '實',
+  '务': '務',
+  '险': '險',
+  '寿': '壽',
+  '产': '產',
+  '众': '眾',
+  '广': '廣',
+  '应': '應',
+  '该': '該',
+};
+
+final Map<String, String> _traditionalToSimplified = {
+  for (final entry in _simplifiedToTraditional.entries) entry.value: entry.key,
+};
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   pdfrx.pdfrxFlutterInitialize();
@@ -557,6 +666,56 @@ class AiService {
           .join('\n');
     }
     throw const AiRequestException('AI 返回内容为空');
+  }
+
+  Future<String> generateAnalysis({
+    required AiSettings settings,
+    required Question question,
+  }) async {
+    final content = await chatCompletion(
+      settings: settings,
+      maxTokens: 700,
+      messages: [
+        {
+          'role': 'system',
+          'content':
+              '你是考试题库解析助手。只输出严格 JSON，不要 Markdown。JSON 格式：{"analysis":"简短但具体的答案解释"}',
+        },
+        {
+          'role': 'user',
+          'content':
+              '''
+请为下面单选题生成答案解释。解释需要说明为什么正确答案成立，也尽量指出其他选项不合适之处。
+
+题目：${question.text}
+A. ${question.options['A'] ?? ''}
+B. ${question.options['B'] ?? ''}
+C. ${question.options['C'] ?? ''}
+D. ${question.options['D'] ?? ''}
+正确答案：${question.answer}
+''',
+        },
+      ],
+    );
+    try {
+      var text = content.trim();
+      final fence = RegExp(r'```(?:json)?\s*([\s\S]*?)```').firstMatch(text);
+      if (fence != null) text = fence.group(1)!.trim();
+      final start = text.indexOf('{');
+      final end = text.lastIndexOf('}');
+      if (start >= 0 && end > start) text = text.substring(start, end + 1);
+      final decoded = jsonDecode(text);
+      if (decoded is Map<String, dynamic>) {
+        final analysis = decoded['analysis']?.toString().trim() ?? '';
+        if (analysis.isNotEmpty) return analysis;
+      }
+    } catch (_) {
+      // Fall back to plain text below.
+    }
+    return content
+        .replaceAll(RegExp(r'```(?:json)?'), '')
+        .replaceAll('```', '')
+        .trim();
   }
 
   Future<String> _request({
@@ -1474,6 +1633,8 @@ class _ExamHomePageState extends State<ExamHomePage> {
   var _mode = PracticeMode.bank;
   var _questionCount = 20;
   var _aiSettings = AiSettings.empty;
+  var _language = ChineseLanguage.simplified;
+  var _generateAnalysisOnImport = false;
   String? _selectedTarget;
   String? _selectedAnswer;
   String? _feedback;
@@ -1483,6 +1644,8 @@ class _ExamHomePageState extends State<ExamHomePage> {
   final Map<int, String> _answers = {};
   var _currentIndex = 0;
   var _finished = false;
+
+  String _tr(String value) => translateChinese(value, _language);
 
   @override
   void initState() {
@@ -1671,11 +1834,18 @@ class _ExamHomePageState extends State<ExamHomePage> {
         aiSettings: _aiSettings,
         onRequireAiSettings: () async =>
             await _openAiSettings(required: true) ?? _aiSettings,
-        onBankGenerated: (bank) {
+        onBankGenerated: (bank, {generateAnalysis = false}) {
           setState(() {
             _banks = [..._banks, bank];
             _selectedTarget ??= bank.name;
           });
+          if (generateAnalysis) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _generateExplanations(bank, onlyMissingInitial: true);
+              }
+            });
+          }
           _showMessage('题库已生成并加入列表');
         },
       ),
@@ -1686,6 +1856,22 @@ class _ExamHomePageState extends State<ExamHomePage> {
       appBar: AppBar(
         title: const Text('考试练习系统'),
         actions: [
+          PopupMenuButton<ChineseLanguage>(
+            tooltip: _tr('语言'),
+            icon: const Icon(Icons.translate),
+            initialValue: _language,
+            onSelected: (value) => setState(() => _language = value),
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: ChineseLanguage.simplified,
+                child: Text('简体中文'),
+              ),
+              PopupMenuItem(
+                value: ChineseLanguage.traditional,
+                child: Text('繁體中文'),
+              ),
+            ],
+          ),
           IconButton(
             tooltip: 'AI 设置',
             onPressed: _loading ? null : () => _openAiSettings(),
@@ -1708,19 +1894,22 @@ class _ExamHomePageState extends State<ExamHomePage> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tabIndex,
         onDestinationSelected: (index) => setState(() => _tabIndex = index),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.quiz_outlined), label: '练习'),
+        destinations: [
+          NavigationDestination(
+            icon: Icon(Icons.quiz_outlined),
+            label: _tr('练习'),
+          ),
           NavigationDestination(
             icon: Icon(Icons.library_books_outlined),
-            label: '题库',
+            label: _tr('题库'),
           ),
           NavigationDestination(
             icon: Icon(Icons.auto_fix_high_outlined),
-            label: '生成',
+            label: _tr('生成'),
           ),
           NavigationDestination(
             icon: Icon(Icons.history_outlined),
-            label: '记录',
+            label: _tr('记录'),
           ),
         ],
       ),
@@ -1766,7 +1955,10 @@ class _ExamHomePageState extends State<ExamHomePage> {
                       .map(
                         (target) => DropdownMenuItem(
                           value: target,
-                          child: Text(target, overflow: TextOverflow.ellipsis),
+                          child: Text(
+                            _tr(target),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       )
                       .toList(),
@@ -1851,7 +2043,7 @@ class _ExamHomePageState extends State<ExamHomePage> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    question.text,
+                    _tr(question.text),
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 16),
@@ -1892,7 +2084,9 @@ class _ExamHomePageState extends State<ExamHomePage> {
                               ),
                               const SizedBox(width: 12),
                               Expanded(
-                                child: Text('${entry.key}. ${entry.value}'),
+                                child: Text(
+                                  '${entry.key}. ${_tr(entry.value)}',
+                                ),
                               ),
                             ],
                           ),
@@ -1947,7 +2141,7 @@ class _ExamHomePageState extends State<ExamHomePage> {
                     const SizedBox(height: 16),
                     _FeedbackBox(
                       feedback: _feedback!,
-                      analysis: question.analysis,
+                      analysis: _tr(question.analysis),
                       correct: _answers[_currentIndex] == question.answer,
                     ),
                   ],
@@ -1961,59 +2155,372 @@ class _ExamHomePageState extends State<ExamHomePage> {
   }
 
   Widget _buildBankPage() {
-    return ListView.separated(
+    return ListView(
       padding: const EdgeInsets.all(16),
-      itemCount: _banks.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 10),
-      itemBuilder: (context, index) {
-        final bank = _banks[index];
-        return Card(
-          child: ExpansionTile(
-            leading: const Icon(Icons.menu_book_outlined),
-            title: Text(bank.name),
-            subtitle: Text('${bank.examGroup} · ${bank.questions.length} 题'),
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _tr('题库管理'),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: _loading ? null : _importQuestionBank,
+                      icon: const Icon(Icons.file_upload_outlined),
+                      label: Text(_tr('导入题库 JSON')),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Checkbox(
+                          value: _generateAnalysisOnImport,
+                          onChanged: (value) => setState(
+                            () => _generateAnalysisOnImport = value ?? false,
+                          ),
+                        ),
+                        Text(_tr('导入后用 AI 补解析')),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _tr(
+                    '导入文件请参考 templates/question_bank_template.json。内置题库只读；导入和生成的题库可编辑、删除。',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        for (final bank in _banks) ...[
+          Card(
+            child: ExpansionTile(
+              leading: const Icon(Icons.menu_book_outlined),
+              trailing: _bankActionMenu(bank),
+              title: Text(_tr(bank.name)),
+              subtitle: Text(
+                '${_tr(bank.examGroup)} · ${bank.questions.length} ${_tr('题')}',
+              ),
+              children: [
+                for (final question in bank.questions.take(12))
+                  ListTile(
+                    dense: true,
+                    title: Text(
+                      _tr(question.text),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text('${_tr('答案')}：${question.answer}'),
+                  ),
+                if (bank.questions.length > 12)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(_tr('仅预览前 12 题，其余题目可在练习中随机抽取。')),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+      ],
+    );
+  }
+
+  Widget _bankActionMenu(QuestionBank bank) {
+    return PopupMenuButton<String>(
+      tooltip: _tr('题库操作'),
+      onSelected: (value) {
+        switch (value) {
+          case 'edit':
+            _editGeneratedBank(bank);
+            break;
+          case 'delete':
+            _deleteGeneratedBank(bank);
+            break;
+          case 'analysis':
+            _generateExplanations(bank);
+            break;
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: 'analysis',
+          child: ListTile(
+            leading: const Icon(Icons.psychology_alt_outlined),
+            title: Text(_tr('AI 补解析')),
+            dense: true,
+          ),
+        ),
+        if (bank.isGenerated)
+          PopupMenuItem(
+            value: 'edit',
+            child: ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: Text(_tr('编辑')),
+              dense: true,
+            ),
+          ),
+        if (bank.isGenerated)
+          PopupMenuItem(
+            value: 'delete',
+            child: ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: Text(_tr('删除')),
+              dense: true,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _importQuestionBank() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+      withData: false,
+    );
+    final path = result?.files.single.path;
+    if (path == null) return;
+    try {
+      final content = await File(path).readAsString();
+      final parsed = jsonDecode(content);
+      if (parsed is! Map<String, dynamic>) {
+        throw const FormatException('题库 JSON 必须是对象');
+      }
+      final imported = QuestionBank.fromJson(parsed);
+      if (imported.questions.isEmpty) {
+        throw const FormatException('没有识别到有效题目');
+      }
+      final now = DateTime.now();
+      final id = 'import_${now.microsecondsSinceEpoch}';
+      final bank = _bankWithGeneratedId(imported, id);
+      await _generatedBankStore.saveGeneratedBank(
+        bank: bank,
+        metadata: GeneratedBankMetadata(
+          id: id,
+          name: bank.name,
+          examGroup: bank.examGroup,
+          questionCount: bank.questions.length,
+          sourcePdfName: p.basename(path),
+          createdAt: now.toIso8601String(),
+          status: 'imported',
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        _banks = [..._banks, bank];
+        _selectedTarget ??= bank.name;
+      });
+      _showMessage('题库已导入');
+      if (_generateAnalysisOnImport) {
+        await _generateExplanations(bank, onlyMissingInitial: true);
+      }
+    } catch (error) {
+      if (mounted) _showMessage('导入失败：$error');
+    }
+  }
+
+  Future<void> _generateExplanations(
+    QuestionBank bank, {
+    bool onlyMissingInitial = true,
+  }) async {
+    var onlyMissing = onlyMissingInitial;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(_tr('AI 生成答案解析')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (bank.isGenerated)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: Row(
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: () => _editGeneratedBank(bank),
-                        icon: const Icon(Icons.edit_outlined),
-                        label: const Text('编辑'),
-                      ),
-                      const SizedBox(width: 8),
-                      OutlinedButton.icon(
-                        onPressed: () => _deleteGeneratedBank(bank),
-                        icon: const Icon(Icons.delete_outline),
-                        label: const Text('删除'),
-                      ),
-                    ],
-                  ),
-                ),
-              for (final question in bank.questions.take(12))
-                ListTile(
-                  dense: true,
-                  title: Text(
-                    question.text,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text('答案：${question.answer}'),
-                ),
-              if (bank.questions.length > 12)
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('仅预览前 12 题，其余题目可在练习中随机抽取。'),
-                  ),
-                ),
+              Text(_tr('将使用当前 AI 设置为题库生成解析。内置题库会另存为一个可编辑副本。')),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: onlyMissing,
+                onChanged: (value) =>
+                    setDialogState(() => onlyMissing = value ?? true),
+                title: Text(_tr('仅补充缺失解析')),
+              ),
             ],
           ),
-        );
-      },
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(_tr('取消')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(_tr('开始')),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+
+    var settings = _aiSettings;
+    if (!settings.isConfigured) {
+      settings = await _openAiSettings(required: true) ?? _aiSettings;
+      if (!settings.isConfigured) return;
+    }
+
+    var cancelled = false;
+    var done = 0;
+    final total = bank.questions
+        .where((question) => !onlyMissing || question.analysis.trim().isEmpty)
+        .length;
+    if (total == 0) {
+      _showMessage('没有需要补充解析的题目');
+      return;
+    }
+
+    if (!mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          Future<void>.delayed(Duration.zero, () async {
+            if (done != 0 || cancelled) return;
+            final updatedQuestions = <Question>[];
+            for (final question in bank.questions) {
+              if (cancelled) break;
+              if (onlyMissing && question.analysis.trim().isNotEmpty) {
+                updatedQuestions.add(question);
+                continue;
+              }
+              try {
+                final analysis = await _aiService.generateAnalysis(
+                  settings: settings,
+                  question: question,
+                );
+                updatedQuestions.add(
+                  _copyQuestion(question, analysis: analysis),
+                );
+              } catch (_) {
+                updatedQuestions.add(question);
+              }
+              done += 1;
+              if (context.mounted) setDialogState(() {});
+            }
+            if (!cancelled && mounted) {
+              final newId = bank.isGenerated
+                  ? bank.generatedId
+                  : 'analysis_${DateTime.now().microsecondsSinceEpoch}';
+              final updatedBank = QuestionBank(
+                name: bank.isGenerated ? bank.name : '${bank.name}（AI解析）',
+                examGroup: bank.examGroup,
+                questions: updatedQuestions,
+                generatedId: newId,
+              );
+              await _generatedBankStore.saveGeneratedBank(
+                bank: updatedBank,
+                metadata: GeneratedBankMetadata(
+                  id: newId,
+                  name: updatedBank.name,
+                  examGroup: updatedBank.examGroup,
+                  questionCount: updatedBank.questions.length,
+                  sourcePdfName: bank.isGenerated ? '' : bank.name,
+                  createdAt: DateTime.now().toIso8601String(),
+                  status: 'analysis_generated',
+                ),
+              );
+              if (mounted) {
+                setState(() {
+                  if (bank.isGenerated) {
+                    _banks = [
+                      for (final item in _banks)
+                        item.generatedId == bank.generatedId
+                            ? updatedBank
+                            : item,
+                    ];
+                  } else {
+                    _banks = [..._banks, updatedBank];
+                  }
+                });
+              }
+            }
+            if (context.mounted) Navigator.pop(context);
+            if (mounted && !cancelled) _showMessage('答案解析已生成');
+          });
+          final value = total == 0 ? null : done / total;
+          return AlertDialog(
+            title: Text(_tr('正在生成解析')),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LinearProgressIndicator(value: value),
+                const SizedBox(height: 12),
+                Text('$done / $total'),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  cancelled = true;
+                  Navigator.pop(context);
+                },
+                child: Text(_tr('取消')),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  QuestionBank _bankWithGeneratedId(QuestionBank bank, String id) {
+    return QuestionBank(
+      name: bank.name,
+      examGroup: bank.examGroup,
+      questions: [
+        for (final question in bank.questions)
+          _copyQuestion(
+            question,
+            sourceBank: question.sourceBank.trim().isEmpty
+                ? bank.name
+                : question.sourceBank,
+            examGroup: question.examGroup.trim().isEmpty
+                ? bank.examGroup
+                : question.examGroup,
+          ),
+      ],
+      generatedId: id,
+    );
+  }
+
+  Question _copyQuestion(
+    Question question, {
+    String? analysis,
+    String? sourceBank,
+    String? examGroup,
+  }) {
+    return Question(
+      id: question.id,
+      text: question.text,
+      options: question.options,
+      answer: question.answer,
+      analysis: analysis ?? question.analysis,
+      sourceBank: sourceBank ?? question.sourceBank,
+      examGroup: examGroup ?? question.examGroup,
     );
   }
 
@@ -2142,7 +2649,8 @@ class QuestionGeneratorPage extends StatefulWidget {
 
   final AiSettings aiSettings;
   final Future<AiSettings> Function() onRequireAiSettings;
-  final void Function(QuestionBank bank) onBankGenerated;
+  final void Function(QuestionBank bank, {bool generateAnalysis})
+  onBankGenerated;
 
   @override
   State<QuestionGeneratorPage> createState() => _QuestionGeneratorPageState();
@@ -2162,6 +2670,7 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
   QuestionBank? _lastBank;
   var _busy = false;
   var _cancelRequested = false;
+  var _generateAnalysisAfterGeneration = false;
   var _status = '';
   final List<String> _logs = [];
 
@@ -2318,7 +2827,10 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
         _status = '生成完成，共 ${bank.questions.length} 题';
       });
       _addLog('生成完成：${bank.questions.length} 题');
-      widget.onBankGenerated(bank);
+      widget.onBankGenerated(
+        bank,
+        generateAnalysis: _generateAnalysisAfterGeneration,
+      );
     } on GenerationCancelledException {
       await _loadLatestJob();
       if (mounted) setState(() => _status = '已暂停，可稍后继续');
@@ -2456,6 +2968,17 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
                       ),
                     ),
                   ],
+                ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _generateAnalysisAfterGeneration,
+                  onChanged: _busy
+                      ? null
+                      : (value) => setState(
+                          () =>
+                              _generateAnalysisAfterGeneration = value ?? false,
+                        ),
+                  title: const Text('生成后用 AI 补答案解析'),
                 ),
                 const SizedBox(height: 12),
                 Row(

@@ -29,6 +29,7 @@ out/
 # Records
 *.json
 !assets/question_banks/*.json
+!templates/question_bank_template.json
 
 # Secrets / local config
 .env
