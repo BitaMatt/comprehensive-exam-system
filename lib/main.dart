@@ -188,6 +188,35 @@ const Map<String, String> _simplifiedToTraditional = {
   '卖': '賣',
   '劳': '勞',
   '块': '塊',
+  '机': '機',
+  '读': '讀',
+  '载': '載',
+  '围': '圍',
+  '请': '請',
+  '补': '補',
+  '还': '還',
+  '没': '沒',
+  '档': '檔',
+  '线': '線',
+  '网': '網',
+  '络': '絡',
+  '临': '臨',
+  '时': '時',
+  '压': '壓',
+  '缩': '縮',
+  '级': '級',
+  '处': '處',
+  '户': '戶',
+  '启': '啟',
+  '备': '備',
+  '份': '份',
+  '径': '徑',
+  '绪': '緒',
+  '写': '寫',
+  '传': '傳',
+  '输': '輸',
+  '过': '過',
+  '滤': '濾',
 };
 
 final Map<String, String> _traditionalToSimplified = {
@@ -1854,6 +1883,7 @@ class _ExamHomePageState extends State<ExamHomePage> {
         initialSettings: _aiSettings,
         aiService: _aiService,
         forceSetup: required,
+        translate: _tr,
       ),
     );
     if (result == null) return null;
@@ -1877,7 +1907,7 @@ class _ExamHomePageState extends State<ExamHomePage> {
   void _showMessage(String message) {
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ).showSnackBar(SnackBar(content: Text(_tr(message))));
   }
 
   @override
@@ -1887,6 +1917,7 @@ class _ExamHomePageState extends State<ExamHomePage> {
       _buildBankPage(),
       QuestionGeneratorPage(
         aiSettings: _aiSettings,
+        translate: _tr,
         onRequireAiSettings: () async =>
             await _openAiSettings(required: true) ?? _aiSettings,
         onBankGenerated: (bank, {generateAnalysis = false}) {
@@ -1928,7 +1959,7 @@ class _ExamHomePageState extends State<ExamHomePage> {
             ],
           ),
           IconButton(
-            tooltip: 'AI 设置',
+            tooltip: _tr('AI 设置'),
             onPressed: _loading ? null : () => _openAiSettings(),
             icon: const Icon(Icons.smart_toy_outlined),
           ),
@@ -1984,19 +2015,22 @@ class _ExamHomePageState extends State<ExamHomePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('练习设置', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  _tr('练习设置'),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const SizedBox(height: 12),
                 SegmentedButton<PracticeMode>(
-                  segments: const [
+                  segments: [
                     ButtonSegment(
                       value: PracticeMode.bank,
-                      icon: Icon(Icons.description_outlined),
-                      label: Text('单卷'),
+                      icon: const Icon(Icons.description_outlined),
+                      label: Text(_tr('单卷')),
                     ),
                     ButtonSegment(
                       value: PracticeMode.group,
-                      icon: Icon(Icons.folder_copy_outlined),
-                      label: Text('分组'),
+                      icon: const Icon(Icons.folder_copy_outlined),
+                      label: Text(_tr('分组')),
                     ),
                   ],
                   selected: {_mode},
@@ -2005,7 +2039,7 @@ class _ExamHomePageState extends State<ExamHomePage> {
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: _selectedTarget,
-                  decoration: const InputDecoration(labelText: '练习目标'),
+                  decoration: InputDecoration(labelText: _tr('练习目标')),
                   items: _targets
                       .map(
                         (target) => DropdownMenuItem(
@@ -2033,7 +2067,7 @@ class _ExamHomePageState extends State<ExamHomePage> {
                         min: 5,
                         max: 120,
                         divisions: 23,
-                        label: '$_questionCount 题',
+                        label: '$_questionCount ${_tr('题')}',
                         onChanged: (value) {
                           setState(() => _questionCount = value.round());
                         },
@@ -2042,14 +2076,14 @@ class _ExamHomePageState extends State<ExamHomePage> {
                     SizedBox(
                       width: 80,
                       child: Text(
-                        '$_questionCount 题',
+                        '$_questionCount ${_tr('题')}',
                         textAlign: TextAlign.end,
                         style: Theme.of(context).textTheme.labelLarge,
                       ),
                     ),
                   ],
                 ),
-                Text('当前目标共 $availableQuestions 题，会随机抽取不超过题库数量的题目。'),
+                Text(_tr('当前目标共 $availableQuestions 题，会随机抽取不超过题库数量的题目。')),
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,
@@ -2058,12 +2092,12 @@ class _ExamHomePageState extends State<ExamHomePage> {
                     FilledButton.icon(
                       onPressed: _startExam,
                       icon: const Icon(Icons.play_arrow),
-                      label: const Text('开始练习'),
+                      label: Text(_tr('开始练习')),
                     ),
                     OutlinedButton.icon(
                       onPressed: () => setState(_resetExam),
                       icon: const Icon(Icons.refresh),
-                      label: const Text('重置'),
+                      label: Text(_tr('重置')),
                     ),
                   ],
                 ),
@@ -2083,7 +2117,9 @@ class _ExamHomePageState extends State<ExamHomePage> {
                     children: [
                       Expanded(
                         child: Text(
-                          '第 ${_currentIndex + 1} / ${_currentExam.length} 题',
+                          _tr(
+                            '第 ${_currentIndex + 1} / ${_currentExam.length} 题',
+                          ),
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                       ),
@@ -2152,8 +2188,8 @@ class _ExamHomePageState extends State<ExamHomePage> {
                     controller: _answerController,
                     maxLength: 1,
                     textCapitalization: TextCapitalization.characters,
-                    decoration: const InputDecoration(
-                      labelText: '手动输入答案',
+                    decoration: InputDecoration(
+                      labelText: _tr('手动输入答案'),
                       hintText: 'A/B/C/D',
                       counterText: '',
                     ),
@@ -2175,7 +2211,7 @@ class _ExamHomePageState extends State<ExamHomePage> {
                       FilledButton.icon(
                         onPressed: _finished ? null : _submitAnswer,
                         icon: const Icon(Icons.check),
-                        label: const Text('提交答案'),
+                        label: Text(_tr('提交答案')),
                       ),
                       OutlinedButton.icon(
                         onPressed: _finished ? null : _nextQuestion,
@@ -2186,8 +2222,8 @@ class _ExamHomePageState extends State<ExamHomePage> {
                         ),
                         label: Text(
                           _currentIndex == _currentExam.length - 1
-                              ? '完成练习'
-                              : '下一题',
+                              ? _tr('完成练习')
+                              : _tr('下一题'),
                         ),
                       ),
                     ],
@@ -2195,8 +2231,9 @@ class _ExamHomePageState extends State<ExamHomePage> {
                   if (_feedback != null) ...[
                     const SizedBox(height: 16),
                     _FeedbackBox(
-                      feedback: _feedback!,
+                      feedback: _tr(_feedback!),
                       analysis: _tr(question.analysis),
+                      analysisLabel: _tr('解析'),
                       correct: _answers[_currentIndex] == question.answer,
                     ),
                   ],
@@ -2583,16 +2620,16 @@ class _ExamHomePageState extends State<ExamHomePage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('删除题库'),
-        content: Text('确定删除「${bank.name}」吗？此操作不会删除原始 PDF。'),
+        title: Text(_tr('删除题库')),
+        content: Text(_tr('确定删除「${bank.name}」吗？此操作不会删除原始 PDF。')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(_tr('取消')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('删除'),
+            child: Text(_tr('删除')),
           ),
         ],
       ),
@@ -2616,25 +2653,25 @@ class _ExamHomePageState extends State<ExamHomePage> {
     final result = await showDialog<QuestionBank>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('编辑题库'),
+        title: Text(_tr('编辑题库')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: nameController,
-              decoration: const InputDecoration(labelText: '题库名称'),
+              decoration: InputDecoration(labelText: _tr('题库名称')),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: groupController,
-              decoration: const InputDecoration(labelText: '考试分组'),
+              decoration: InputDecoration(labelText: _tr('考试分组')),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
+            child: Text(_tr('取消')),
           ),
           FilledButton(
             onPressed: () async {
@@ -2648,7 +2685,7 @@ class _ExamHomePageState extends State<ExamHomePage> {
               );
               if (context.mounted) Navigator.pop(context, updated);
             },
-            child: const Text('保存'),
+            child: Text(_tr('保存')),
           ),
         ],
       ),
@@ -2669,7 +2706,7 @@ class _ExamHomePageState extends State<ExamHomePage> {
 
   Widget _buildRecordPage() {
     if (_records.isEmpty) {
-      return const Center(child: Text('还没有练习记录'));
+      return Center(child: Text(_tr('还没有练习记录')));
     }
 
     return ListView.separated(
@@ -2681,7 +2718,7 @@ class _ExamHomePageState extends State<ExamHomePage> {
         return Card(
           child: ListTile(
             leading: CircleAvatar(child: Text(record.rate.round().toString())),
-            title: Text(record.target),
+            title: Text(_tr(record.target)),
             subtitle: Text(record.time),
             trailing: Text(
               '${record.correct}/${record.total}',
@@ -2698,11 +2735,13 @@ class QuestionGeneratorPage extends StatefulWidget {
   const QuestionGeneratorPage({
     super.key,
     required this.aiSettings,
+    required this.translate,
     required this.onRequireAiSettings,
     required this.onBankGenerated,
   });
 
   final AiSettings aiSettings;
+  final String Function(String value) translate;
   final Future<AiSettings> Function() onRequireAiSettings;
   final void Function(QuestionBank bank, {bool generateAnalysis})
   onBankGenerated;
@@ -2728,6 +2767,8 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
   var _generateAnalysisAfterGeneration = false;
   var _status = '';
   final List<String> _logs = [];
+
+  String _tr(String value) => widget.translate(value);
 
   QuestionGenerationService get _generationService => QuestionGenerationService(
     aiService: const AiService(),
@@ -2926,7 +2967,7 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
   void _showMessage(String message) {
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ).showSnackBar(SnackBar(content: Text(_tr(message))));
   }
 
   @override
@@ -2942,7 +2983,10 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('题库生成', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  _tr('题库生成'),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,
@@ -2951,7 +2995,7 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
                     FilledButton.icon(
                       onPressed: _busy ? null : _pickPdf,
                       icon: const Icon(Icons.picture_as_pdf_outlined),
-                      label: const Text('选择 PDF'),
+                      label: Text(_tr('选择 PDF')),
                     ),
                     if (_latestJob != null)
                       OutlinedButton.icon(
@@ -2959,23 +3003,23 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
                             ? null
                             : () => _startGeneration(resumeJob: _latestJob),
                         icon: const Icon(Icons.replay_outlined),
-                        label: const Text('继续上次任务'),
+                        label: Text(_tr('继续上次任务')),
                       ),
                     OutlinedButton.icon(
                       onPressed: _lastBank == null ? null : _exportLastBank,
                       icon: const Icon(Icons.ios_share_outlined),
-                      label: const Text('导出 JSON'),
+                      label: Text(_tr('导出 JSON')),
                     ),
                   ],
                 ),
                 if (inspection != null) ...[
                   const SizedBox(height: 12),
-                  Text('文件：${inspection.name}'),
+                  Text('${_tr('文件')}：${inspection.name}'),
                   Text(
-                    '页数：${inspection.totalPages}，大小：${_formatBytes(inspection.sizeBytes)}',
+                    '${_tr('页数')}：${inspection.totalPages}，${_tr('大小')}：${_formatBytes(inspection.sizeBytes)}',
                   ),
                   Text(
-                    '语言：${inspection.languageHint}，类型：${inspection.scannedLike ? '疑似扫描件' : '可抽取文本'}',
+                    '${_tr('语言')}：${_tr(inspection.languageHint)}，${_tr('类型')}：${inspection.scannedLike ? _tr('疑似扫描件') : _tr('可抽取文本')}',
                   ),
                 ],
               ],
@@ -2990,12 +3034,12 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
               children: [
                 TextField(
                   controller: _bankNameController,
-                  decoration: const InputDecoration(labelText: '题库名称'),
+                  decoration: InputDecoration(labelText: _tr('题库名称')),
                 ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: _groupController,
-                  decoration: const InputDecoration(labelText: '考试分组'),
+                  decoration: InputDecoration(labelText: _tr('考试分组')),
                 ),
                 const SizedBox(height: 10),
                 Row(
@@ -3003,7 +3047,7 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
                     Expanded(
                       child: TextField(
                         controller: _prefixController,
-                        decoration: const InputDecoration(labelText: '题号前缀'),
+                        decoration: InputDecoration(labelText: _tr('题号前缀')),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -3011,7 +3055,7 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
                       child: TextField(
                         controller: _startPageController,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: '起始页'),
+                        decoration: InputDecoration(labelText: _tr('起始页')),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -3019,7 +3063,7 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
                       child: TextField(
                         controller: _endPageController,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: '结束页'),
+                        decoration: InputDecoration(labelText: _tr('结束页')),
                       ),
                     ),
                   ],
@@ -3033,7 +3077,7 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
                           () =>
                               _generateAnalysisAfterGeneration = value ?? false,
                         ),
-                  title: const Text('生成后用 AI 补答案解析'),
+                  title: Text(_tr('生成后用 AI 补答案解析')),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -3042,7 +3086,7 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
                       child: FilledButton.icon(
                         onPressed: _busy ? null : _startGeneration,
                         icon: const Icon(Icons.auto_fix_high),
-                        label: const Text('开始生成'),
+                        label: Text(_tr('开始生成')),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -3051,7 +3095,7 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
                           ? () => setState(() => _cancelRequested = true)
                           : null,
                       icon: const Icon(Icons.pause_circle_outline),
-                      label: const Text('暂停'),
+                      label: Text(_tr('暂停')),
                     ),
                   ],
                 ),
@@ -3066,19 +3110,19 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('进度', style: Theme.of(context).textTheme.titleMedium),
+                Text(_tr('进度'), style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 10),
                 LinearProgressIndicator(value: progress?.value),
                 const SizedBox(height: 10),
-                Text(_status.isEmpty ? '等待选择 PDF' : _status),
+                Text(_tr(_status.isEmpty ? '等待选择 PDF' : _status)),
                 if (progress != null) ...[
-                  Text('阶段：${progress.stage}'),
+                  Text('${_tr('阶段')}：${_tr(progress.stage)}'),
                   Text(
-                    '页码：${progress.currentPage}/${progress.totalPages}，片段：${progress.currentChunk}/${progress.totalChunks}，已生成：${progress.successCount} 题',
+                    '${_tr('页码')}：${progress.currentPage}/${progress.totalPages}，${_tr('片段')}：${progress.currentChunk}/${progress.totalChunks}，${_tr('已生成')}：${progress.successCount} ${_tr('题')}',
                   ),
                   if (progress.warning.trim().isNotEmpty)
                     Text(
-                      progress.warning,
+                      _tr(progress.warning),
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.error,
                       ),
@@ -3092,7 +3136,7 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
         Card(
           child: ExpansionTile(
             leading: const Icon(Icons.bug_report_outlined),
-            title: Text('调试日志（${_logs.length}）'),
+            title: Text('${_tr('调试日志')}（${_logs.length}）'),
             children: [
               Container(
                 width: double.infinity,
@@ -3100,7 +3144,7 @@ class _QuestionGeneratorPageState extends State<QuestionGeneratorPage> {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 child: SingleChildScrollView(
                   child: SelectableText(
-                    _logs.isEmpty ? '暂无日志' : _logs.join('\n'),
+                    _logs.isEmpty ? _tr('暂无日志') : _tr(_logs.join('\n')),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
@@ -3134,11 +3178,13 @@ class AiSettingsDialog extends StatefulWidget {
     required this.initialSettings,
     required this.aiService,
     required this.forceSetup,
+    required this.translate,
   });
 
   final AiSettings initialSettings;
   final AiService aiService;
   final bool forceSetup;
+  final String Function(String value) translate;
 
   @override
   State<AiSettingsDialog> createState() => _AiSettingsDialogState();
@@ -3151,6 +3197,8 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
   var _loading = false;
   var _message = '';
   List<String> _models = [];
+
+  String _tr(String value) => widget.translate(value);
 
   @override
   void initState() {
@@ -3234,7 +3282,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     return PopScope(
       canPop: !widget.forceSetup,
       child: AlertDialog(
-        title: const Text('AI 设置'),
+        title: Text(_tr('AI 设置')),
         content: SizedBox(
           width: min(MediaQuery.of(context).size.width * 0.86, 520),
           child: SingleChildScrollView(
@@ -3243,9 +3291,9 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (widget.forceSetup)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 12),
-                    child: Text('首次打开软件需要配置 AI 接口。API Key 只保存在本机。'),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(_tr('首次打开软件需要配置 AI 接口。API Key 只保存在本机。')),
                   ),
                 TextField(
                   controller: _baseUrlController,
@@ -3266,8 +3314,8 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: _modelController,
-                  decoration: const InputDecoration(
-                    labelText: '模型',
+                  decoration: InputDecoration(
+                    labelText: _tr('模型'),
                     hintText: defaultAiModel,
                   ),
                 ),
@@ -3278,7 +3326,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                     value: _models.contains(_modelController.text.trim())
                         ? _modelController.text.trim()
                         : null,
-                    hint: const Text('选择获取到的模型'),
+                    hint: Text(_tr('选择获取到的模型')),
                     items: _models
                         .map(
                           (model) => DropdownMenuItem(
@@ -3300,18 +3348,18 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                     OutlinedButton.icon(
                       onPressed: _loading ? null : _fetchModels,
                       icon: const Icon(Icons.cloud_download_outlined),
-                      label: const Text('获取模型'),
+                      label: Text(_tr('获取模型')),
                     ),
                     OutlinedButton.icon(
                       onPressed: _loading ? null : _testConnection,
                       icon: const Icon(Icons.network_check_outlined),
-                      label: const Text('测试连接'),
+                      label: Text(_tr('测试连接')),
                     ),
                   ],
                 ),
                 if (_message.isNotEmpty) ...[
                   const SizedBox(height: 12),
-                  Text(_message),
+                  Text(_tr(_message)),
                 ],
                 if (_loading) ...[
                   const SizedBox(height: 12),
@@ -3325,11 +3373,11 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
           if (!widget.forceSetup)
             TextButton(
               onPressed: _loading ? null : () => Navigator.of(context).pop(),
-              child: const Text('取消'),
+              child: Text(_tr('取消')),
             ),
           FilledButton(
             onPressed: _loading ? null : _save,
-            child: const Text('保存'),
+            child: Text(_tr('保存')),
           ),
         ],
       ),
@@ -3341,11 +3389,13 @@ class _FeedbackBox extends StatelessWidget {
   const _FeedbackBox({
     required this.feedback,
     required this.analysis,
+    required this.analysisLabel,
     required this.correct,
   });
 
   final String feedback;
   final String analysis;
+  final String analysisLabel;
   final bool correct;
 
   @override
@@ -3371,7 +3421,7 @@ class _FeedbackBox extends StatelessWidget {
           ),
           if (analysis.trim().isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text('解析：$analysis'),
+            Text('$analysisLabel：$analysis'),
           ],
         ],
       ),
