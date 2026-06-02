@@ -102,6 +102,19 @@ void main() {
     );
   });
 
+  test('uses broad simplified traditional conversion for bank content', () {
+    const text = '火灾的损毁，可包括：由烟、水及热力引致的损毁。这些是火灾常见的伴随后果，不属于火灾的直接损毁范畴，也可能波及邻近财产。';
+
+    expect(
+      translateChinese(text, ChineseLanguage.traditional),
+      '火災的損毀，可包括：由煙、水及熱力引致的損毀。這些是火災常見的伴隨後果，不屬於火災的直接損毀範疇，也可能波及鄰近財產。',
+    );
+    expect(
+      translateChinese('火災的損毀，可包括水及熱力，並波及鄰近財產。', ChineseLanguage.simplified),
+      '火灾的损毁，可包括水及热力，并波及邻近财产。',
+    );
+  });
+
   test('sample scanned PDF can be rendered for OCR when available', () async {
     const path = r'C:\Users\pc\Documents\保險考證\卷2模擬題.pdf';
     if (!File(path).existsSync()) return;
