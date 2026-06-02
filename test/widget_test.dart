@@ -92,6 +92,16 @@ void main() {
     );
   });
 
+  test('translates common question and analysis text to traditional Chinese', () {
+    const text =
+        '考试练习系统：自然损耗、折旧等是属于以下哪项除外责任？因为这些损失是必然发生的、可预见的，不符合风险原则。选项D普通除外责任并非标准分类。';
+
+    expect(
+      translateChinese(text, ChineseLanguage.traditional),
+      '考試練習系統：自然損耗、折舊等是屬於以下哪項除外責任？因為這些損失是必然發生的、可預見的，不符合風險原則。選項D普通除外責任並非標準分類。',
+    );
+  });
+
   test('sample scanned PDF can be rendered for OCR when available', () async {
     const path = r'C:\Users\pc\Documents\保險考證\卷2模擬題.pdf';
     if (!File(path).existsSync()) return;
