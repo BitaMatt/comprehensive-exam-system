@@ -42,7 +42,11 @@ String translateChinese(String value, ChineseLanguage language) {
 }
 
 String _normalizeTraditionalGlyphs(String value) {
-  return value.replaceAll('爲', '為').replaceAll('産', '產').replaceAll('裏', '裡');
+  return value
+      .replaceAll('爲', '為')
+      .replaceAll('産', '產')
+      .replaceAll('裏', '裡')
+      .replaceAll('嬯', '始');
 }
 
 void main() {

@@ -115,6 +115,11 @@ void main() {
     );
   });
 
+  test('normalizes uncommon traditional variants in UI labels', () {
+    expect(translateChinese('开始练习', ChineseLanguage.traditional), '開始練習');
+    expect(translateChinese('起始页', ChineseLanguage.traditional), '起始頁');
+  });
+
   test('sample scanned PDF can be rendered for OCR when available', () async {
     const path = r'C:\Users\pc\Documents\保險考證\卷2模擬題.pdf';
     if (!File(path).existsSync()) return;
