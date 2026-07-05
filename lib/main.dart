@@ -1865,13 +1865,27 @@ class _ExamHomePageState extends State<ExamHomePage> {
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: _selectedTarget,
+                  isExpanded: true,
                   decoration: InputDecoration(labelText: _tr('练习目标')),
+                  selectedItemBuilder: (context) => _targets
+                      .map(
+                        (target) => Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            _tr(target),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
                   items: _targets
                       .map(
                         (target) => DropdownMenuItem(
                           value: target,
                           child: Text(
                             _tr(target),
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
