@@ -3022,6 +3022,7 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
   late final TextEditingController _modelController;
   var _loading = false;
   var _message = '';
+  var _hideApiKey = false;
   List<String> _models = [];
 
   String _tr(String value) => widget.translate(value);
@@ -3131,10 +3132,22 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: _apiKeyController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
+                  obscureText: _hideApiKey,
+                  enableSuggestions: false,
+                  autocorrect: false,
+                  decoration: InputDecoration(
                     labelText: 'API Key',
                     hintText: 'sk-...',
+                    suffixIcon: IconButton(
+                      tooltip: _tr(_hideApiKey ? '显示 API Key' : '隐藏 API Key'),
+                      onPressed: () =>
+                          setState(() => _hideApiKey = !_hideApiKey),
+                      icon: Icon(
+                        _hideApiKey
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
