@@ -5,7 +5,7 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show Clipboard, rootBundle;
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -3104,6 +3104,19 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
     Navigator.of(context).pop(settings);
   }
 
+  Future<void> _pasteApiKeyFromClipboard() async {
+    final data = await Clipboard.getData('text/plain');
+    final text = data?.text?.trim() ?? '';
+    if (text.isEmpty) {
+      setState(() => _message = '剪贴板为空');
+      return;
+    }
+    setState(() {
+      _apiKeyController.text = text;
+      _message = '已从剪贴板粘贴 API Key';
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -3133,20 +3146,35 @@ class _AiSettingsDialogState extends State<AiSettingsDialog> {
                 TextField(
                   controller: _apiKeyController,
                   obscureText: _hideApiKey,
+                  keyboardType: TextInputType.text,
                   enableSuggestions: false,
                   autocorrect: false,
                   decoration: InputDecoration(
                     labelText: 'API Key',
                     hintText: 'sk-...',
-                    suffixIcon: IconButton(
-                      tooltip: _tr(_hideApiKey ? '显示 API Key' : '隐藏 API Key'),
-                      onPressed: () =>
-                          setState(() => _hideApiKey = !_hideApiKey),
-                      icon: Icon(
-                        _hideApiKey
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined,
-                      ),
+                    suffixIcon: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: _tr('粘贴 API Key'),
+                          onPressed: _loading
+                              ? null
+                              : _pasteApiKeyFromClipboard,
+                          icon: const Icon(Icons.content_paste_outlined),
+                        ),
+                        IconButton(
+                          tooltip: _tr(
+                            _hideApiKey ? '显示 API Key' : '隐藏 API Key',
+                          ),
+                          onPressed: () =>
+                              setState(() => _hideApiKey = !_hideApiKey),
+                          icon: Icon(
+                            _hideApiKey
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
